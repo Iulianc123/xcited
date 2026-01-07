@@ -47,10 +47,10 @@ jobs:
       - name: Deploy to CWP7pro Production
         uses: appleboy/scp-action@master
         with:
-          host: ${{ secrets.CWP_PROD_HOST }}
-          username: ${{ secrets.CWP_PROD_USER }}
-          key: ${{ secrets.CWP_PROD_SSH_KEY }}
-          port: ${{ secrets.CWP_PROD_PORT || 22 }}
+          host: ${{ secrets.CWP_HOST }}
+          username: ${{ secrets.CWP_USER }}
+          key: ${{ secrets.CWP_SSH_KEY }}
+          port: ${{ secrets.CWP_PORT || 22 }}
           source: "deploy-package/*"
           target: "/home/xcited/public_html"
           rm: true
@@ -58,10 +58,10 @@ jobs:
       - name: Run post-deploy script on server
         uses: appleboy/ssh-action@master
         with:
-          host: ${{ secrets.CWP_PROD_HOST }}
-          username: ${{ secrets.CWP_PROD_USER }}
-          key: ${{ secrets.CWP_PROD_SSH_KEY }}
-          port: ${{ secrets.CWP_PROD_PORT || 22 }}
+          host: ${{ secrets.CWP_HOST }}
+          username: ${{ secrets.CWP_USER }}
+          key: ${{ secrets.CWP_SSH_KEY }}
+          port: ${{ secrets.CWP_PORT || 22 }}
           script: |
             cd /home/xcited/public_html
             npm install --production || npm ci --production --frozen-lockfile

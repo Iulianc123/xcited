@@ -4,7 +4,7 @@
 
 1. **Push cod pe GitHub** ✓
    - Toate workflow-urile sunt pe GitHub
-   - Workflow-urile folosesc `CWP_PROD_*` secrets (același server ca wishhub)
+   - Workflow-urile folosesc `CWP_*` secrets (aceleași ca în `1dream` - același server)
 
 2. **Configurare workflow-uri** ✓
    - `deploy-prod.yml` - deployment automat
@@ -61,10 +61,10 @@ Pentru domeniul `xcited.ro`, configurează reverse proxy către `localhost:3001`
 
 ### 4. Verifică GitHub Secrets
 Asigură-te că următoarele secrets există în GitHub:
-- `CWP_PROD_HOST` - același ca pentru wishhub
-- `CWP_PROD_USER` - același ca pentru wishhub  
-- `CWP_PROD_SSH_KEY` - același ca pentru wishhub
-- `CWP_PROD_PORT` - același ca pentru wishhub
+- `CWP_HOST` - același ca în `1dream` (același server)
+- `CWP_USER` - același ca în `1dream` sau user separat pentru `xcited`
+- `CWP_SSH_KEY` - același ca în `1dream` (aceeași cheie SSH pentru același server)
+- `CWP_PORT` - același ca în `1dream` (același port SSH)
 - `DATABASE_URL` - connection string PostgreSQL pentru xcited
 - `NEXTAUTH_SECRET` - secret pentru NextAuth (min 32 caractere)
 - `NEXTAUTH_URL` - `https://xcited.ro`

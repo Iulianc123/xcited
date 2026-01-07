@@ -35,18 +35,24 @@ Click pe **"New repository secret"** pentru fiecare secret.
   - Exemplu: `noreply@xcited.org`
 
 ### 🖥️ CWP7pro Server
-- **`CWP_XCITED_HOST`** - IP sau hostname serverului
+**Folosește aceleași secrete ca în `1dream` pentru a putea folosi aceeași configurare:**
+
+- **`CWP_HOST`** - IP sau hostname serverului
   - Exemplu: `xcited.org` sau `123.45.67.89`
+  - **NOTĂ**: Folosește aceeași valoare ca în `1dream` (același server)
   
-- **`CWP_XCITED_USER`** - User SSH
+- **`CWP_USER`** - User SSH
   - Exemplu: `xcited` sau `root`
+  - **NOTĂ**: Poate fi același user ca în `1dream` sau un user separat pentru `xcited`
   
-- **`CWP_XCITED_SSH_KEY`** - Cheia SSH privată
-  - Generează pe server: `ssh-keygen -t rsa -b 4096 -C "github-actions-xcited"`
+- **`CWP_SSH_KEY`** - Cheia SSH privată
+  - **NOTĂ**: Folosește aceeași cheie SSH ca în `1dream` (aceeași cheie pentru același server)
+  - Sau generează una nouă pe server: `ssh-keygen -t rsa -b 4096 -C "github-actions-xcited"`
   - Copiază conținutul: `cat ~/.ssh/id_rsa`
   
-- **`CWP_XCITED_PORT`** - Port SSH (opțional, default: 22)
+- **`CWP_PORT`** - Port SSH (opțional, default: 22)
   - Exemplu: `22`
+  - **NOTĂ**: Folosește aceeași valoare ca în `1dream` (același port SSH)
 
 ## 🚀 Pași de Setup
 

@@ -31,10 +31,11 @@ Adaugă următoarele secrets:
 - `EMAIL_FROM` - From address (ex: `noreply@xcited.org`)
 
 **CWP7pro Server:**
-- `CWP_XCITED_HOST` - IP sau hostname server
-- `CWP_XCITED_USER` - User SSH (ex: `xcited`)
-- `CWP_XCITED_SSH_KEY` - Cheie SSH privată
-- `CWP_XCITED_PORT` - Port SSH (opțional, default: 22)
+**Folosește aceleași secrete ca în `1dream` pentru a putea folosi aceeași configurare:**
+- `CWP_HOST` - IP sau hostname server (același ca în `1dream`)
+- `CWP_USER` - User SSH (același ca în `1dream` sau user separat pentru `xcited`)
+- `CWP_SSH_KEY` - Cheie SSH privată (aceeași ca în `1dream`)
+- `CWP_PORT` - Port SSH (opțional, default: 22, același ca în `1dream`)
 
 ### 2. Setup Server (Prima Dată)
 

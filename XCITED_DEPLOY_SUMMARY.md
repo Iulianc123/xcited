@@ -38,10 +38,10 @@ Adaugă:
 - `NEXTAUTH_SECRET`
 - `NEXTAUTH_URL`
 - `EMAIL_SERVER_*` (dacă folosești email auth)
-- `CWP_XCITED_HOST`
-- `CWP_XCITED_USER`
-- `CWP_XCITED_SSH_KEY`
-- `CWP_XCITED_PORT` (opțional)
+- `CWP_HOST` - același ca în `1dream` (același server)
+- `CWP_USER` - același ca în `1dream` sau user separat pentru `xcited`
+- `CWP_SSH_KEY` - același ca în `1dream` (aceeași cheie SSH)
+- `CWP_PORT` (opțional) - același ca în `1dream`
 
 ### 3. Setup Server (Prima Dată)
 
