@@ -98,7 +98,16 @@ EOF
           port: ${{ secrets.CWP_PROD_PORT || 22 }}
           script: |
             set -e
+            echo "🔍 Checking if /home/xcited/public_html exists..."
+            if [ ! -d "/home/xcited/public_html" ]; then
+              echo "📁 Creating directory /home/xcited/public_html..."
+              mkdir -p /home/xcited/public_html
+              chown -R xcited:xcited /home/xcited/public_html 2>/dev/null || chown -R root:root /home/xcited/public_html
+            fi
+            
             cd /home/xcited/public_html
+            pwd
+            ls -la
             
             echo "📦 Installing production dependencies..."
             if [ -f "package-lock.json" ]; then
@@ -128,6 +137,8 @@ EOF
               pm2 start server.js --name "xcited-web" --instances 2 --exec-mode cluster
             else
               echo "❌ ERROR: No server.js or ecosystem.config.js found!"
+              echo "📋 Files in directory:"
+              ls -la
               exit 1
             fi
             
