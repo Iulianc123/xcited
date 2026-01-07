@@ -143,7 +143,7 @@ jobs:
             echo "🔄 Managing PM2 process..."
             pm2 delete xcited-web 2>/dev/null || true
             
-            # Find server.js in standalone build structure
+            # Find server.js in standalone build structure (exclude node_modules)
             SERVER_JS=""
             if [ -f "server.js" ]; then
               SERVER_JS="server.js"
@@ -152,8 +152,8 @@ jobs:
             elif [ -f "standalone/server.js" ]; then
               SERVER_JS="standalone/server.js"
             else
-              echo "🔍 Searching for server.js..."
-              SERVER_JS=$(find . -name "server.js" -type f | head -1)
+              echo "🔍 Searching for server.js (excluding node_modules)..."
+              SERVER_JS=$(find . -name "server.js" -type f -not -path "*/node_modules/*" | head -1)
             fi
             
             if [ -z "$SERVER_JS" ] || [ ! -f "$SERVER_JS" ]; then
@@ -161,8 +161,8 @@ jobs:
               echo "📁 Current directory structure:"
               ls -la
               echo ""
-              echo "🔍 Searching for server.js..."
-              find . -name "server.js" -type f || echo "No server.js found"
+              echo "🔍 Searching for server.js (excluding node_modules)..."
+              find . -name "server.js" -type f -not -path "*/node_modules/*" || echo "No server.js found"
               echo ""
               echo "⚠️  Cannot start PM2 without server.js"
               echo "💡 Verifică dacă build-ul standalone a fost creat corect"
@@ -177,8 +177,8 @@ jobs:
               sed -i "s|script: 'server.js'|script: '$SERVER_JS'|g" ecosystem.config.js || true
               pm2 start ecosystem.config.js
             else
-              # Start directly with server.js
-              pm2 start "$SERVER_JS" --name "xcited-web" --instances 2 --exec-mode cluster --env PORT=3001
+              # Start directly with server.js (use --exec_mode with underscore, not --exec-mode)
+              pm2 start "$SERVER_JS" --name "xcited-web" --instances 2 --exec_mode cluster --env PORT=3001
             fi
             
             pm2 save
