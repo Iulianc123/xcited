@@ -99,7 +99,7 @@ jobs:
           echo '  }]' >> deploy-package/ecosystem.config.js
           echo '}' >> deploy-package/ecosystem.config.js
 
-      - name: Pre-deploy: Ensure directory permissions
+      - name: Pre-deploy Ensure directory permissions
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.CWP_HOST }}
