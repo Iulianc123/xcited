@@ -131,15 +131,19 @@ jobs:
             whoami
             id
             
-            # Check if xcited user exists, fallback to current user if not
+            # Verify xcited user exists (should exist since domain exists)
             if ! id -u "${OWNER_USER}" >/dev/null 2>&1; then
-              echo "WARN: user '${OWNER_USER}' does not exist. Falling back to '${REMOTE_USER}'."
-              OWNER_USER="${REMOTE_USER}"
-              OWNER_GROUP="${REMOTE_GROUP}"
+              echo "⚠️  ERROR: user '${OWNER_USER}' does not exist!"
+              echo "   User should exist since domain xcited.ro exists in CWP7pro"
+              echo "   Please verify user exists or create it manually"
+              exit 1
             fi
             if ! getent group "${OWNER_GROUP}" >/dev/null 2>&1; then
-              echo "WARN: group '${OWNER_GROUP}' does not exist. Falling back to '${REMOTE_GROUP}'."
-              OWNER_GROUP="${REMOTE_GROUP}"
+              echo "⚠️  WARN: group '${OWNER_GROUP}' does not exist. Creating group..."
+              groupadd "${OWNER_GROUP}" 2>/dev/null || {
+                echo "   Group creation failed, using existing group for user"
+                OWNER_GROUP=$(id -gn "${OWNER_USER}")
+              }
             fi
             
             echo "== Ensure target directory exists =="

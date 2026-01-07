@@ -23,12 +23,14 @@ jobs:
             set -e
             echo "🔧 Setting up xcited server infrastructure..."
             
-            # Create user if it doesn't exist
+            # Verify user exists (user should already exist since domain exists)
             if ! id -u xcited >/dev/null 2>&1; then
-              echo "👤 Creating user xcited..."
-              useradd -m -s /bin/bash xcited || echo "⚠️  User creation failed (may already exist)"
+              echo "⚠️  User xcited does not exist!"
+              echo "   User should exist since domain xcited.ro exists"
+              echo "   Please create user manually or check CWP7pro configuration"
+              exit 1
             else
-              echo "✅ User xcited already exists"
+              echo "✅ User xcited exists"
             fi
             
             # Create directory structure
