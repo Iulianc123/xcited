@@ -60,11 +60,24 @@ jobs:
             echo "⚙️  Configuring PM2 startup..."
             pm2 startup systemd -u root --hp /root 2>/dev/null || echo "⚠️  PM2 startup config failed (may already be configured)"
             
+            # Enable required Apache modules
+            echo "🔧 Enabling Apache modules..."
+            a2enmod proxy proxy_http headers 2>/dev/null || {
+              echo "   a2enmod not available (CentOS/RHEL), modules should be enabled in main config"
+            }
+            
             # Create Apache reverse proxy configuration
             echo "🌐 Configuring Apache reverse proxy..."
             echo '<VirtualHost *:80>' > /etc/httpd/conf.d/xcited.conf
             echo '    ServerName xcited.ro' >> /etc/httpd/conf.d/xcited.conf
             echo '    ServerAlias www.xcited.ro' >> /etc/httpd/conf.d/xcited.conf
+            echo '    DocumentRoot /home/xcited/public_html' >> /etc/httpd/conf.d/xcited.conf
+            echo '' >> /etc/httpd/conf.d/xcited.conf
+            echo '    <Directory /home/xcited/public_html>' >> /etc/httpd/conf.d/xcited.conf
+            echo '        Options -Indexes +FollowSymLinks' >> /etc/httpd/conf.d/xcited.conf
+            echo '        AllowOverride None' >> /etc/httpd/conf.d/xcited.conf
+            echo '        Require all granted' >> /etc/httpd/conf.d/xcited.conf
+            echo '    </Directory>' >> /etc/httpd/conf.d/xcited.conf
             echo '' >> /etc/httpd/conf.d/xcited.conf
             echo '    ProxyPreserveHost On' >> /etc/httpd/conf.d/xcited.conf
             echo '    ProxyPass / http://localhost:3001/' >> /etc/httpd/conf.d/xcited.conf
@@ -72,6 +85,7 @@ jobs:
             echo '' >> /etc/httpd/conf.d/xcited.conf
             echo '    ErrorLog /var/log/httpd/xcited_error.log' >> /etc/httpd/conf.d/xcited.conf
             echo '    CustomLog /var/log/httpd/xcited_access.log combined' >> /etc/httpd/conf.d/xcited.conf
+            echo '    LogLevel warn' >> /etc/httpd/conf.d/xcited.conf
             echo '</VirtualHost>' >> /etc/httpd/conf.d/xcited.conf
             
             # Test Apache configuration

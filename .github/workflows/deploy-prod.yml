@@ -261,4 +261,31 @@ jobs:
             
             pm2 save
             echo "✅ Application started with PM2"
+            
+            # Verify application is running
+            echo "🔍 Verifying application..."
+            sleep 3
+            if pm2 describe xcited-web >/dev/null 2>&1; then
+              echo "✅ PM2 process xcited-web is running"
+              pm2 list
+            else
+              echo "⚠️  PM2 process xcited-web not found"
+              pm2 list
+            fi
+            
+            # Test if application responds on port 3001
+            echo "🔍 Testing application on port 3001..."
+            if curl -f http://localhost:3001 >/dev/null 2>&1; then
+              echo "✅ Application responds on port 3001"
+            else
+              echo "⚠️  Application does not respond on port 3001"
+              echo "   Checking PM2 logs..."
+              pm2 logs xcited-web --lines 20 --nostream || echo "   No logs available"
+            fi
+            
+            # Final permissions check for Apache
+            echo "🔍 Final permissions check..."
+            ls -la "${TARGET}" | head -10
+            echo "   Owner: $(stat -c '%U:%G' "${TARGET}" 2>/dev/null || echo 'unknown')"
+            echo "   Permissions: $(stat -c '%a' "${TARGET}" 2>/dev/null || echo 'unknown')"
 
