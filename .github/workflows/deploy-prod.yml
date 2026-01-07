@@ -75,28 +75,26 @@ jobs:
             cp -r node_modules/.prisma deploy-package/node_modules/ 2>/dev/null || true
           fi
           
-          # Create ecosystem.config.js for PM2 (like 1dream)
-          cat > deploy-package/ecosystem.config.js << 'PM2CONFIG'
-module.exports = {
-  apps: [{
-    name: 'xcited-web',
-    script: 'server.js',
-    cwd: '/home/xcited/public_html',
-    instances: 2,
-    exec_mode: 'cluster',
-    env: {
-      NODE_ENV: 'production',
-      PORT: 3001
-    },
-    error_file: '/var/log/pm2/xcited-web-error.log',
-    out_file: '/var/log/pm2/xcited-web-out.log',
-    log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
-    merge_logs: true,
-    autorestart: true,
-    max_memory_restart: '1G'
-  }]
-}
-PM2CONFIG
+          # Create ecosystem.config.js for PM2 (like 1dream - using echo to avoid YAML issues)
+          echo 'module.exports = {' > deploy-package/ecosystem.config.js
+          echo '  apps: [{' >> deploy-package/ecosystem.config.js
+          echo "    name: 'xcited-web'," >> deploy-package/ecosystem.config.js
+          echo "    script: 'server.js'," >> deploy-package/ecosystem.config.js
+          echo "    cwd: '/home/xcited/public_html'," >> deploy-package/ecosystem.config.js
+          echo '    instances: 2,' >> deploy-package/ecosystem.config.js
+          echo "    exec_mode: 'cluster'," >> deploy-package/ecosystem.config.js
+          echo '    env: {' >> deploy-package/ecosystem.config.js
+          echo "      NODE_ENV: 'production'," >> deploy-package/ecosystem.config.js
+          echo '      PORT: 3001' >> deploy-package/ecosystem.config.js
+          echo '    },' >> deploy-package/ecosystem.config.js
+          echo "    error_file: '/var/log/pm2/xcited-web-error.log'," >> deploy-package/ecosystem.config.js
+          echo "    out_file: '/var/log/pm2/xcited-web-out.log'," >> deploy-package/ecosystem.config.js
+          echo "    log_date_format: 'YYYY-MM-DD HH:mm:ss Z'," >> deploy-package/ecosystem.config.js
+          echo '    merge_logs: true,' >> deploy-package/ecosystem.config.js
+          echo '    autorestart: true,' >> deploy-package/ecosystem.config.js
+          echo "    max_memory_restart: '1G'" >> deploy-package/ecosystem.config.js
+          echo '  }]' >> deploy-package/ecosystem.config.js
+          echo '}' >> deploy-package/ecosystem.config.js
 
       - name: Deploy to CWP7pro Production
         uses: appleboy/scp-action@master
