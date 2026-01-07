@@ -118,6 +118,8 @@ jobs:
           port: ${{ secrets.CWP_PORT || 22 }}
           script: |
             set -e
+            # Note: This script runs as the user specified in CWP_USER (usually root)
+            # We use sudo where needed, but most commands should work as root
             
             TARGET="/home/xcited/public_html"
             OWNER_USER="xcited"
@@ -151,17 +153,31 @@ jobs:
             
             echo "== Set correct ownership and permissions =="
             # Set ownership to xcited user (or fallback)
-            # Use sudo to ensure ownership change works even if files are owned by root
-            if sudo -n true 2>/dev/null; then
-              sudo chown -R "${OWNER_USER}:${OWNER_GROUP}" "${TARGET}" || {
-                echo "WARN: sudo chown failed, trying without sudo..."
-                chown -R "${OWNER_USER}:${OWNER_GROUP}" "${TARGET}" || echo "⚠️  Ownership change failed"
+            # CRITICAL: Use sudo to ensure ownership change works even if files are owned by root
+            # This is necessary because SCP may copy files as root
+            echo "🔧 Setting ownership to ${OWNER_USER}:${OWNER_GROUP}..."
+            
+            # Try with sudo first (most reliable)
+            sudo chown -R "${OWNER_USER}:${OWNER_GROUP}" "${TARGET}" 2>&1 || {
+              echo "⚠️  sudo chown failed, trying without sudo..."
+              chown -R "${OWNER_USER}:${OWNER_GROUP}" "${TARGET}" 2>&1 || {
+                echo "❌ Ownership change failed completely"
+                echo "   This may cause 'Forbidden' errors"
+                echo "   Manual fix needed: sudo chown -R ${OWNER_USER}:${OWNER_GROUP} ${TARGET}"
               }
+            }
+            
+            # Verify ownership was set correctly
+            echo "🔍 Verifying ownership..."
+            WRONG_OWNER=$(find "${TARGET}" ! -user "${OWNER_USER}" -o ! -group "${OWNER_GROUP}" 2>/dev/null | head -5)
+            if [ -n "$WRONG_OWNER" ]; then
+              echo "⚠️  WARNING: Some files still have wrong ownership:"
+              echo "$WRONG_OWNER"
+              echo "   Attempting to fix with sudo..."
+              sudo find "${TARGET}" ! -user "${OWNER_USER}" -exec chown "${OWNER_USER}:${OWNER_GROUP}" {} \; 2>/dev/null || true
+              sudo find "${TARGET}" ! -group "${OWNER_GROUP}" -exec chgrp "${OWNER_GROUP}" {} \; 2>/dev/null || true
             else
-              chown -R "${OWNER_USER}:${OWNER_GROUP}" "${TARGET}" || {
-                echo "WARN: chown failed (may need sudo)"
-                echo "⚠️  Ownership change failed - files may still be owned by root"
-              }
+              echo "✅ All files have correct ownership: ${OWNER_USER}:${OWNER_GROUP}"
             fi
             
             # Set correct permissions for directories and files
