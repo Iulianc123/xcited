@@ -151,10 +151,18 @@ jobs:
             
             echo "== Set correct ownership and permissions =="
             # Set ownership to xcited user (or fallback)
-            chown -R "${OWNER_USER}:${OWNER_GROUP}" "${TARGET}" || {
-              echo "WARN: chown failed, trying with sudo..."
-              sudo chown -R "${OWNER_USER}:${OWNER_GROUP}" "${TARGET}" || echo "⚠️  Ownership change failed"
-            }
+            # Use sudo to ensure ownership change works even if files are owned by root
+            if sudo -n true 2>/dev/null; then
+              sudo chown -R "${OWNER_USER}:${OWNER_GROUP}" "${TARGET}" || {
+                echo "WARN: sudo chown failed, trying without sudo..."
+                chown -R "${OWNER_USER}:${OWNER_GROUP}" "${TARGET}" || echo "⚠️  Ownership change failed"
+              }
+            else
+              chown -R "${OWNER_USER}:${OWNER_GROUP}" "${TARGET}" || {
+                echo "WARN: chown failed (may need sudo)"
+                echo "⚠️  Ownership change failed - files may still be owned by root"
+              }
+            fi
             
             # Set correct permissions for directories and files
             find "${TARGET}" -type d -exec chmod 755 {} \; 2>/dev/null || {
