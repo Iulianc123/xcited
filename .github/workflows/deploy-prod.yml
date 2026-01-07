@@ -36,15 +36,21 @@ jobs:
 
       - name: Create deployment package
         run: |
+          rm -rf deploy-package
           mkdir -p deploy-package
-          # Copy standalone build
+          
+          # Next.js standalone output (like 1dream)
           if [ -d ".next/standalone" ]; then
             echo "✅ Found standalone build"
-            cp -r .next/standalone/* deploy-package/
+            cp -R .next/standalone/* deploy-package/
+            
+            # Static assets must be copied into the standalone folder structure
             mkdir -p deploy-package/.next
-            cp -r .next/static deploy-package/.next/static
+            cp -R .next/static deploy-package/.next/static
+            
+            # public/ is optional in Next.js projects
             if [ -d "public" ]; then
-              cp -r public deploy-package/public
+              cp -R public deploy-package/public
             fi
           else
             echo "⚠️  No standalone build, using regular build"
@@ -53,15 +59,23 @@ jobs:
               cp -r public deploy-package/
             fi
           fi
+          
           # Copy necessary files
-          cp -r prisma deploy-package/
+          if [ -d "prisma" ]; then
+            cp -r prisma deploy-package/
+          fi
           cp package.json deploy-package/
           cp package-lock.json deploy-package/ 2>/dev/null || true
           cp next.config.ts deploy-package/
           cp tsconfig.json deploy-package/
+          
           # Copy Prisma generated client
-          cp -r node_modules/.prisma deploy-package/node_modules/ 2>/dev/null || true
-          # Create ecosystem.config.js for PM2
+          if [ -d "node_modules/.prisma" ]; then
+            mkdir -p deploy-package/node_modules
+            cp -r node_modules/.prisma deploy-package/node_modules/ 2>/dev/null || true
+          fi
+          
+          # Create ecosystem.config.js for PM2 (like 1dream)
           cat > deploy-package/ecosystem.config.js << 'ENDOFFILE'
 module.exports = {
   apps: [{
@@ -104,50 +118,50 @@ ENDOFFILE
           port: ${{ secrets.CWP_PROD_PORT || 22 }}
           script: |
             set -e
-            echo "🔍 Checking if /home/xcited/public_html exists..."
-            if [ ! -d "/home/xcited/public_html" ]; then
-              echo "📁 Creating directory /home/xcited/public_html..."
-              mkdir -p /home/xcited/public_html
-              chown -R xcited:xcited /home/xcited/public_html 2>/dev/null || chown -R root:root /home/xcited/public_html
-            fi
-            
             cd /home/xcited/public_html
-            pwd
-            ls -la
             
-            echo "📦 Installing production dependencies..."
+            echo "== Verify deployed files =="
+            pwd
+            ls -la || true
+            
+            echo "== Installing production dependencies (like 1dream) =="
             if [ -f "package-lock.json" ]; then
               npm ci --production --frozen-lockfile || npm install --production
             else
               npm install --production
             fi
             
-            echo "🔧 Generating Prisma Client..."
+            echo "== Generating Prisma Client =="
             if [ -d "prisma" ]; then
               npx prisma generate || echo "⚠️  Prisma generate failed (continuing...)"
             fi
             
-            echo "🔄 Running Prisma migrations..."
+            echo "== Running Prisma migrations =="
             if [ -d "prisma" ] && [ -n "${{ secrets.DATABASE_URL }}" ] && [ "${{ secrets.DATABASE_URL }}" != "postgresql://user:pass@localhost:5432/xcited" ]; then
               DATABASE_URL="${{ secrets.DATABASE_URL }}" npx prisma migrate deploy || echo "⚠️  Migrations failed (continuing...)"
             else
               echo "⚠️  Skipping migrations (no DATABASE_URL secret or placeholder)"
             fi
             
-            echo "🔄 Restarting application with PM2..."
-            # Stop existing process
-            pm2 delete xcited-web 2>/dev/null || true
+            echo "== Restarting application with PM2 (like 1dream) =="
+            export PORT=3001
+            export NODE_ENV=production
             
-            # Start with ecosystem.config.js if it exists, otherwise use server.js
-            if [ -f "ecosystem.config.js" ]; then
-              pm2 start ecosystem.config.js
-            elif [ -f "server.js" ]; then
-              PORT=3001 pm2 start server.js --name "xcited-web" --instances 2 --exec-mode cluster
+            # Check if server.js exists (standalone build)
+            if [ -f "server.js" ]; then
+              SCRIPT="server.js"
             else
-              echo "❌ ERROR: No server.js or ecosystem.config.js found!"
+              echo "❌ ERROR: server.js not found!"
               echo "📋 Files in directory:"
               ls -la
               exit 1
+            fi
+            
+            # Restart or start PM2 (like 1dream)
+            if pm2 describe xcited-web >/dev/null 2>&1; then
+              pm2 restart xcited-web --update-env
+            else
+              pm2 start "${SCRIPT}" --name xcited-web
             fi
             
             pm2 save
