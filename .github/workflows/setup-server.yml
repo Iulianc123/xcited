@@ -55,19 +55,17 @@ jobs:
             
             # Create Apache reverse proxy configuration
             echo "🌐 Configuring Apache reverse proxy..."
-            cat > /etc/httpd/conf.d/xcited.conf << 'APACHE_EOF'
-<VirtualHost *:80>
-    ServerName xcited.ro
-    ServerAlias www.xcited.ro
-    
-    ProxyPreserveHost On
-    ProxyPass / http://localhost:3001/
-    ProxyPassReverse / http://localhost:3001/
-    
-    ErrorLog /var/log/httpd/xcited_error.log
-    CustomLog /var/log/httpd/xcited_access.log combined
-</VirtualHost>
-APACHE_EOF
+            echo '<VirtualHost *:80>' > /etc/httpd/conf.d/xcited.conf
+            echo '    ServerName xcited.ro' >> /etc/httpd/conf.d/xcited.conf
+            echo '    ServerAlias www.xcited.ro' >> /etc/httpd/conf.d/xcited.conf
+            echo '' >> /etc/httpd/conf.d/xcited.conf
+            echo '    ProxyPreserveHost On' >> /etc/httpd/conf.d/xcited.conf
+            echo '    ProxyPass / http://localhost:3001/' >> /etc/httpd/conf.d/xcited.conf
+            echo '    ProxyPassReverse / http://localhost:3001/' >> /etc/httpd/conf.d/xcited.conf
+            echo '' >> /etc/httpd/conf.d/xcited.conf
+            echo '    ErrorLog /var/log/httpd/xcited_error.log' >> /etc/httpd/conf.d/xcited.conf
+            echo '    CustomLog /var/log/httpd/xcited_access.log combined' >> /etc/httpd/conf.d/xcited.conf
+            echo '</VirtualHost>' >> /etc/httpd/conf.d/xcited.conf
             
             # Test Apache configuration
             if httpd -t 2>/dev/null; then
