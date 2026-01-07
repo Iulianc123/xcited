@@ -47,15 +47,15 @@ chown -R xcited:xcited /home/xcited/public_html
 ```
 
 ### 3. Configurează Apache reverse proxy
-Pentru domeniul `xcited.ro`, configurează reverse proxy către `localhost:3000`:
+Pentru domeniul `xcited.ro`, configurează reverse proxy către `localhost:3001` (port diferit de wishhub care folosește 3000):
 ```apache
 <VirtualHost *:80>
     ServerName xcited.ro
     ServerAlias www.xcited.ro
     
     ProxyPreserveHost On
-    ProxyPass / http://localhost:3000/
-    ProxyPassReverse / http://localhost:3000/
+    ProxyPass / http://localhost:3001/
+    ProxyPassReverse / http://localhost:3001/
 </VirtualHost>
 ```
 
