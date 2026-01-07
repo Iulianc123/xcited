@@ -2,6 +2,11 @@ name: Setup xcited Server (CWP7pro)
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/TRIGGER_SETUP_SERVER'
 
 jobs:
   setup-server:
