@@ -143,14 +143,42 @@ jobs:
             echo "🔄 Managing PM2 process..."
             pm2 delete xcited-web 2>/dev/null || true
             
-            # Start with ecosystem.config.js if it exists and server.js exists
-            if [ -f "ecosystem.config.js" ] && [ -f "server.js" ]; then
-              pm2 start ecosystem.config.js
-            elif [ -f "server.js" ]; then
-              pm2 start server.js --name "xcited-web" --instances 2 --exec-mode cluster
+            # Find server.js in standalone build structure
+            SERVER_JS=""
+            if [ -f "server.js" ]; then
+              SERVER_JS="server.js"
+            elif [ -f ".next/standalone/server.js" ]; then
+              SERVER_JS=".next/standalone/server.js"
+            elif [ -f "standalone/server.js" ]; then
+              SERVER_JS="standalone/server.js"
             else
-              echo "⚠️  server.js not found, cannot start PM2"
+              echo "🔍 Searching for server.js..."
+              SERVER_JS=$(find . -name "server.js" -type f | head -1)
+            fi
+            
+            if [ -z "$SERVER_JS" ] || [ ! -f "$SERVER_JS" ]; then
+              echo "⚠️  server.js not found"
+              echo "📁 Current directory structure:"
+              ls -la
+              echo ""
+              echo "🔍 Searching for server.js..."
+              find . -name "server.js" -type f || echo "No server.js found"
+              echo ""
+              echo "⚠️  Cannot start PM2 without server.js"
+              echo "💡 Verifică dacă build-ul standalone a fost creat corect"
               exit 1
+            fi
+            
+            echo "✅ Found server.js at: $SERVER_JS"
+            
+            # Update ecosystem.config.js with correct server.js path
+            if [ -f "ecosystem.config.js" ]; then
+              # Update script path in ecosystem.config.js
+              sed -i "s|script: 'server.js'|script: '$SERVER_JS'|g" ecosystem.config.js || true
+              pm2 start ecosystem.config.js
+            else
+              # Start directly with server.js
+              pm2 start "$SERVER_JS" --name "xcited-web" --instances 2 --exec-mode cluster --env PORT=3001
             fi
             
             pm2 save
