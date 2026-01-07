@@ -226,10 +226,33 @@ jobs:
             if [ -f "ecosystem.config.js" ]; then
               # Update script path in ecosystem.config.js
               sed -i "s|script: 'server.js'|script: '$SERVER_JS'|g" ecosystem.config.js || true
+              # Update cwd to current directory
+              sed -i "s|cwd: '/home/xcited/public_html'|cwd: '$(pwd)'|g" ecosystem.config.js || true
+              echo "📋 Starting PM2 with ecosystem.config.js..."
               pm2 start ecosystem.config.js
             else
-              # Start directly with server.js (use --exec_mode with underscore, not --exec-mode)
-              pm2 start "$SERVER_JS" --name "xcited-web" --instances 2 --exec_mode cluster --env PORT=3001
+              # Create ecosystem.config.js if it doesn't exist
+              echo "📝 Creating ecosystem.config.js..."
+              echo 'module.exports = {' > ecosystem.config.js
+              echo '  apps: [{' >> ecosystem.config.js
+              echo "    name: 'xcited-web'," >> ecosystem.config.js
+              echo "    script: '$SERVER_JS'," >> ecosystem.config.js
+              echo "    cwd: '$(pwd)'," >> ecosystem.config.js
+              echo '    instances: 2,' >> ecosystem.config.js
+              echo "    exec_mode: 'cluster'," >> ecosystem.config.js
+              echo '    env: {' >> ecosystem.config.js
+              echo "      NODE_ENV: 'production'," >> ecosystem.config.js
+              echo '      PORT: 3001' >> ecosystem.config.js
+              echo '    },' >> ecosystem.config.js
+              echo "    error_file: '/var/log/pm2/xcited-web-error.log'," >> ecosystem.config.js
+              echo "    out_file: '/var/log/pm2/xcited-web-out.log'," >> ecosystem.config.js
+              echo "    log_date_format: 'YYYY-MM-DD HH:mm:ss Z'," >> ecosystem.config.js
+              echo '    merge_logs: true,' >> ecosystem.config.js
+              echo '    autorestart: true,' >> ecosystem.config.js
+              echo "    max_memory_restart: '1G'" >> ecosystem.config.js
+              echo '  }]' >> ecosystem.config.js
+              echo '}' >> ecosystem.config.js
+              pm2 start ecosystem.config.js
             fi
             
             pm2 save
