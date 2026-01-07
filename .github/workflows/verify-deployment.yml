@@ -1,0 +1,73 @@
+name: Verify xcited Deployment
+
+on:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify deployment status
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.CWP_HOST }}
+          username: ${{ secrets.CWP_USER }}
+          password: ${{ secrets.CWP_SSH_KEY }}
+          port: ${{ secrets.CWP_PORT || 22 }}
+          script: |
+            set -e
+            echo "🔍 Verificare status deployment xcited..."
+            echo ""
+            
+            # Check PM2 status
+            echo "📊 PM2 Status:"
+            pm2 list || echo "⚠️  PM2 not running or no processes"
+            echo ""
+            
+            # Check if app is running on port 3001
+            echo "🔍 Testing port 3001:"
+            if curl -f http://localhost:3001 >/dev/null 2>&1; then
+              echo "✅ Application responds on port 3001"
+              curl -I http://localhost:3001 | head -5
+            else
+              echo "❌ Application does NOT respond on port 3001"
+              echo "   Checking PM2 logs..."
+              pm2 logs xcited-web --lines 30 --nostream || echo "   No logs available"
+            fi
+            echo ""
+            
+            # Check Apache configuration
+            echo "🌐 Apache Configuration:"
+            if [ -f "/etc/httpd/conf.d/xcited.conf" ]; then
+              echo "✅ Apache config file exists"
+              cat /etc/httpd/conf.d/xcited.conf
+            else
+              echo "❌ Apache config file NOT found"
+            fi
+            echo ""
+            
+            # Check Apache status
+            echo "📊 Apache Status:"
+            systemctl status httpd --no-pager -l | head -20 || echo "⚠️  Cannot check Apache status"
+            echo ""
+            
+            # Check file permissions
+            echo "📁 File Permissions:"
+            ls -la /home/xcited/public_html | head -20
+            echo ""
+            echo "   Owner: $(stat -c '%U:%G' /home/xcited/public_html 2>/dev/null || echo 'unknown')"
+            echo "   Permissions: $(stat -c '%a' /home/xcited/public_html 2>/dev/null || echo 'unknown')"
+            echo ""
+            
+            # Check Apache error logs
+            echo "📋 Apache Error Logs (last 20 lines):"
+            tail -20 /var/log/httpd/xcited_error.log 2>/dev/null || echo "   No error logs found"
+            echo ""
+            
+            # Check Apache access logs
+            echo "📋 Apache Access Logs (last 10 lines):"
+            tail -10 /var/log/httpd/xcited_access.log 2>/dev/null || echo "   No access logs found"
+            echo ""
+            
+            echo "✅ Verification completed"
+
