@@ -65,27 +65,25 @@ jobs:
             echo "✅ .env.production deployed"
             
             # Create/update ecosystem.config.js (for standalone build)
-            cat > ecosystem.config.js << 'EOF'
-module.exports = {
-  apps: [{
-    name: 'xcited-web',
-    script: 'server.js',
-    cwd: '/home/xcited/public_html',
-    instances: 2,
-    exec_mode: 'cluster',
-    env: {
-      NODE_ENV: 'production',
-      PORT: 3001
-    },
-    error_file: '/var/log/pm2/xcited-web-error.log',
-    out_file: '/var/log/pm2/xcited-web-out.log',
-    log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
-    merge_logs: true,
-    autorestart: true,
-    max_memory_restart: '1G'
-  }]
-}
-EOF
+            echo 'module.exports = {' > ecosystem.config.js
+            echo '  apps: [{' >> ecosystem.config.js
+            echo "    name: 'xcited-web'," >> ecosystem.config.js
+            echo "    script: 'server.js'," >> ecosystem.config.js
+            echo "    cwd: '/home/xcited/public_html'," >> ecosystem.config.js
+            echo '    instances: 2,' >> ecosystem.config.js
+            echo "    exec_mode: 'cluster'," >> ecosystem.config.js
+            echo '    env: {' >> ecosystem.config.js
+            echo "      NODE_ENV: 'production'," >> ecosystem.config.js
+            echo '      PORT: 3001' >> ecosystem.config.js
+            echo '    },' >> ecosystem.config.js
+            echo "    error_file: '/var/log/pm2/xcited-web-error.log'," >> ecosystem.config.js
+            echo "    out_file: '/var/log/pm2/xcited-web-out.log'," >> ecosystem.config.js
+            echo "    log_date_format: 'YYYY-MM-DD HH:mm:ss Z'," >> ecosystem.config.js
+            echo '    merge_logs: true,' >> ecosystem.config.js
+            echo '    autorestart: true,' >> ecosystem.config.js
+            echo "    max_memory_restart: '1G'" >> ecosystem.config.js
+            echo '  }]' >> ecosystem.config.js
+            echo '}' >> ecosystem.config.js
             
             echo "✅ ecosystem.config.js updated"
             echo ""
