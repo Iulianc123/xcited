@@ -62,7 +62,7 @@ jobs:
           # Copy Prisma generated client
           cp -r node_modules/.prisma deploy-package/node_modules/ 2>/dev/null || true
           # Create ecosystem.config.js for PM2
-          cat > deploy-package/ecosystem.config.js << 'EOFMARKER'
+          cat > deploy-package/ecosystem.config.js << 'ENDOFFILE'
 module.exports = {
   apps: [{
     name: 'xcited-web',
@@ -82,7 +82,7 @@ module.exports = {
     max_memory_restart: '1G'
   }]
 }
-EOFMARKER
+ENDOFFILE
 
       - name: Deploy to CWP7pro Production
         uses: appleboy/scp-action@master
