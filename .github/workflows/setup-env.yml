@@ -61,15 +61,17 @@ EOF
           key: ${{ secrets.CWP_XCITED_SSH_KEY }}
           port: ${{ secrets.CWP_XCITED_PORT || 22 }}
           script: |
+            set -e
             cd /home/xcited/public_html
             
-            # Create/update ecosystem.config.js
+            echo "✅ .env.production deployed"
+            
+            # Create/update ecosystem.config.js (for standalone build)
             cat > ecosystem.config.js << 'EOF'
 module.exports = {
   apps: [{
     name: 'xcited-web',
-    script: 'node_modules/.bin/next',
-    args: 'start',
+    script: 'server.js',
     cwd: '/home/xcited/public_html',
     instances: 2,
     exec_mode: 'cluster',
@@ -91,8 +93,13 @@ EOF
             echo ""
             echo "🔄 Restarting application..."
             pm2 delete xcited-web 2>/dev/null || true
-            pm2 start ecosystem.config.js || pm2 restart xcited-web
-            pm2 save
             
-            echo "✅ Application restarted!"
+            # Start with ecosystem.config.js if server.js exists, otherwise wait for deploy
+            if [ -f "server.js" ]; then
+              pm2 start ecosystem.config.js
+              pm2 save
+              echo "✅ Application restarted!"
+            else
+              echo "⚠️  server.js not found yet. Will start after first deploy."
+            fi
 
