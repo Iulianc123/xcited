@@ -284,16 +284,63 @@ jobs:
               fi
             fi
             
-            # Verify Node.js is accessible
+            # Verify Node.js is accessible and get full path
             NODE_PATH=$(which node 2>/dev/null || echo "")
-            if [ -n "$NODE_PATH" ]; then
-              echo "   Node.js path: $NODE_PATH"
-              echo "   Node.js version: $(node -v)"
-            else
+            if [ -z "$NODE_PATH" ]; then
               echo "❌ ERROR: Node.js not found in PATH"
               echo "   This will cause PM2 to fail"
               exit 1
             fi
+            
+            NODE_VERSION=$(node -v 2>/dev/null || echo "unknown")
+            echo "   Node.js path: $NODE_PATH"
+            echo "   Node.js version: $NODE_VERSION"
+            
+            # CRITICAL: If nvm is being used, we need to ensure PM2 uses the correct Node.js
+            # Check if nvm is active and if so, use the system Node.js instead
+            if echo "$NODE_PATH" | grep -q "nvm"; then
+              echo "⚠️  WARN: nvm is active, Node.js path: $NODE_PATH"
+              echo "   This may cause PM2 to use wrong Node.js version"
+              echo "   Checking for system Node.js..."
+              
+              # Try to find system Node.js (usually in /usr/bin/node or /usr/local/bin/node)
+              SYSTEM_NODE=""
+              for path in /usr/bin/node /usr/local/bin/node /opt/nodejs/bin/node; do
+                if [ -f "$path" ]; then
+                  SYS_VERSION=$($path -v 2>/dev/null || echo "")
+                  if [ -n "$SYS_VERSION" ]; then
+                    SYS_MAJOR=$(echo "$SYS_VERSION" | cut -d'v' -f2 | cut -d'.' -f1)
+                    if [ "$SYS_MAJOR" -ge 18 ]; then
+                      SYSTEM_NODE="$path"
+                      echo "   ✅ Found system Node.js $SYS_VERSION at: $SYSTEM_NODE"
+                      NODE_PATH="$SYSTEM_NODE"
+                      break
+                    fi
+                  fi
+                fi
+              done
+              
+              # If no system Node.js found, install it
+              if [ -z "$SYSTEM_NODE" ]; then
+                echo "   Installing Node.js 20 system-wide..."
+                curl -fsSL https://rpm.nodesource.com/setup_20.x | bash - || echo "⚠️  Node.js setup failed"
+                yum install -y nodejs || echo "⚠️  Node.js install failed"
+                NODE_PATH=$(which node 2>/dev/null || echo "/usr/bin/node")
+                echo "   New Node.js path: $NODE_PATH"
+                echo "   New Node.js version: $(node -v 2>/dev/null || echo 'unknown')"
+              fi
+            fi
+            
+            # Final verification
+            FINAL_VERSION=$($NODE_PATH -v 2>/dev/null || echo "unknown")
+            FINAL_MAJOR=$(echo "$FINAL_VERSION" | cut -d'v' -f2 | cut -d'.' -f1)
+            if [ "$FINAL_MAJOR" -lt 18 ]; then
+              echo "❌ ERROR: Node.js version $FINAL_VERSION is still too old (requires 18+)"
+              echo "   Path: $NODE_PATH"
+              exit 1
+            fi
+            
+            echo "✅ Using Node.js $FINAL_VERSION from: $NODE_PATH"
             
             # Install dependencies (for standalone build, minimal install needed)
             if [ -f "package.json" ]; then
@@ -348,17 +395,40 @@ jobs:
               sed -i "s|cwd: '/home/xcited/public_html'|cwd: '$(pwd)'|g" ecosystem.config.js || true
               
               # CRITICAL: Ensure PM2 uses the correct Node.js version
-              NODE_PATH=$(which node 2>/dev/null || echo "")
-              if [ -n "$NODE_PATH" ]; then
-                echo "🔧 Setting interpreter to: $NODE_PATH"
-                # Add interpreter to ecosystem.config.js if not present
-                if ! grep -q "interpreter:" ecosystem.config.js; then
-                  # Insert interpreter after script line
-                  sed -i "/script:/a\    interpreter: '$NODE_PATH'," ecosystem.config.js || true
-                else
-                  # Update existing interpreter
-                  sed -i "s|interpreter:.*|interpreter: '$NODE_PATH',|g" ecosystem.config.js || true
-                fi
+              # Get the Node.js path we verified earlier (should be system Node.js 20+)
+              NODE_PATH=$(which node 2>/dev/null || echo "/usr/bin/node")
+              
+              # Verify it's the correct version
+              NODE_VER=$($NODE_PATH -v 2>/dev/null || echo "unknown")
+              NODE_MAJOR=$(echo "$NODE_VER" | cut -d'v' -f2 | cut -d'.' -f1)
+              
+              if [ "$NODE_MAJOR" -lt 18 ]; then
+                echo "⚠️  WARN: Node.js at $NODE_PATH is version $NODE_VER (too old)"
+                # Try to find a newer Node.js
+                for path in /usr/bin/node /usr/local/bin/node /opt/nodejs/bin/node; do
+                  if [ -f "$path" ]; then
+                    VER=$($path -v 2>/dev/null || echo "")
+                    if [ -n "$VER" ]; then
+                      MAJOR=$(echo "$VER" | cut -d'v' -f2 | cut -d'.' -f1)
+                      if [ "$MAJOR" -ge 18 ]; then
+                        NODE_PATH="$path"
+                        NODE_VER="$VER"
+                        echo "   ✅ Found better Node.js $VER at: $NODE_PATH"
+                        break
+                      fi
+                    fi
+                  fi
+                done
+              fi
+              
+              echo "🔧 Setting interpreter to: $NODE_PATH (version: $NODE_VER)"
+              # Update interpreter in ecosystem.config.js
+              if ! grep -q "interpreter:" ecosystem.config.js; then
+                # Insert interpreter after script line
+                sed -i "/script:/a\    interpreter: '$NODE_PATH'," ecosystem.config.js || true
+              else
+                # Update existing interpreter with full path
+                sed -i "s|interpreter:.*|interpreter: '$NODE_PATH',|g" ecosystem.config.js || true
               fi
               
               echo "📋 Starting PM2 with ecosystem.config.js..."
@@ -367,7 +437,26 @@ jobs:
             else
               # Create ecosystem.config.js if it doesn't exist
               echo "📝 Creating ecosystem.config.js..."
-              NODE_PATH=$(which node 2>/dev/null || echo "node")
+              # Get the correct Node.js path (system Node.js, not nvm)
+              NODE_PATH=$(which node 2>/dev/null || echo "/usr/bin/node")
+              
+              # If nvm is active, try to find system Node.js
+              if echo "$NODE_PATH" | grep -q "nvm"; then
+                for path in /usr/bin/node /usr/local/bin/node /opt/nodejs/bin/node; do
+                  if [ -f "$path" ]; then
+                    VER=$($path -v 2>/dev/null || echo "")
+                    if [ -n "$VER" ]; then
+                      MAJOR=$(echo "$VER" | cut -d'v' -f2 | cut -d'.' -f1)
+                      if [ "$MAJOR" -ge 18 ]; then
+                        NODE_PATH="$path"
+                        break
+                      fi
+                    fi
+                  fi
+                done
+              fi
+              
+              echo "   Using Node.js: $NODE_PATH ($($NODE_PATH -v 2>/dev/null || echo 'unknown'))"
               echo 'module.exports = {' > ecosystem.config.js
               echo '  apps: [{' >> ecosystem.config.js
               echo "    name: 'xcited-web'," >> ecosystem.config.js
