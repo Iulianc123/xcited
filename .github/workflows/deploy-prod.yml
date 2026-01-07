@@ -81,10 +81,10 @@ EOF
       - name: Deploy to CWP7pro Production
         uses: appleboy/scp-action@master
         with:
-          host: ${{ secrets.CWP_XCITED_HOST }}
-          username: ${{ secrets.CWP_XCITED_USER }}
-          key: ${{ secrets.CWP_XCITED_SSH_KEY }}
-          port: ${{ secrets.CWP_XCITED_PORT || 22 }}
+          host: ${{ secrets.CWP_XCITED_HOST || secrets.CWP_PROD_HOST }}
+          username: ${{ secrets.CWP_XCITED_USER || secrets.CWP_PROD_USER }}
+          key: ${{ secrets.CWP_XCITED_SSH_KEY || secrets.CWP_PROD_SSH_KEY }}
+          port: ${{ secrets.CWP_XCITED_PORT || secrets.CWP_PROD_PORT || 22 }}
           source: "deploy-package/*"
           target: "/home/xcited/public_html"
           rm: true
@@ -92,10 +92,10 @@ EOF
       - name: Run post-deploy on server
         uses: appleboy/ssh-action@master
         with:
-          host: ${{ secrets.CWP_XCITED_HOST }}
-          username: ${{ secrets.CWP_XCITED_USER }}
-          key: ${{ secrets.CWP_XCITED_SSH_KEY }}
-          port: ${{ secrets.CWP_XCITED_PORT || 22 }}
+          host: ${{ secrets.CWP_XCITED_HOST || secrets.CWP_PROD_HOST }}
+          username: ${{ secrets.CWP_XCITED_USER || secrets.CWP_PROD_USER }}
+          key: ${{ secrets.CWP_XCITED_SSH_KEY || secrets.CWP_PROD_SSH_KEY }}
+          port: ${{ secrets.CWP_XCITED_PORT || secrets.CWP_PROD_PORT || 22 }}
           script: |
             set -e
             cd /home/xcited/public_html

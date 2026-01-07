@@ -45,10 +45,10 @@ EOF
       - name: Deploy .env.production to server
         uses: appleboy/scp-action@master
         with:
-          host: ${{ secrets.CWP_XCITED_HOST }}
-          username: ${{ secrets.CWP_XCITED_USER }}
-          key: ${{ secrets.CWP_XCITED_SSH_KEY }}
-          port: ${{ secrets.CWP_XCITED_PORT || 22 }}
+          host: ${{ secrets.CWP_XCITED_HOST || secrets.CWP_PROD_HOST }}
+          username: ${{ secrets.CWP_XCITED_USER || secrets.CWP_PROD_USER }}
+          key: ${{ secrets.CWP_XCITED_SSH_KEY || secrets.CWP_PROD_SSH_KEY }}
+          port: ${{ secrets.CWP_XCITED_PORT || secrets.CWP_PROD_PORT || 22 }}
           source: ".env.production"
           target: "/home/xcited/public_html/.env.production"
           rm: false
@@ -56,10 +56,10 @@ EOF
       - name: Update PM2 config and restart
         uses: appleboy/ssh-action@master
         with:
-          host: ${{ secrets.CWP_XCITED_HOST }}
-          username: ${{ secrets.CWP_XCITED_USER }}
-          key: ${{ secrets.CWP_XCITED_SSH_KEY }}
-          port: ${{ secrets.CWP_XCITED_PORT || 22 }}
+          host: ${{ secrets.CWP_XCITED_HOST || secrets.CWP_PROD_HOST }}
+          username: ${{ secrets.CWP_XCITED_USER || secrets.CWP_PROD_USER }}
+          key: ${{ secrets.CWP_XCITED_SSH_KEY || secrets.CWP_PROD_SSH_KEY }}
+          port: ${{ secrets.CWP_XCITED_PORT || secrets.CWP_PROD_PORT || 22 }}
           script: |
             set -e
             cd /home/xcited/public_html
