@@ -118,11 +118,62 @@ jobs:
           port: ${{ secrets.CWP_PORT || 22 }}
           script: |
             set -e
-            cd /home/xcited/public_html
             
-            # Ensure directory exists and has correct permissions
-            mkdir -p /home/xcited/public_html
-            chown -R xcited:xcited /home/xcited/public_html 2>/dev/null || true
+            TARGET="/home/xcited/public_html"
+            OWNER_USER="xcited"
+            OWNER_GROUP="xcited"
+            
+            # Get current user (should be root)
+            REMOTE_USER="$(id -un)"
+            REMOTE_GROUP="$(id -gn)"
+            
+            echo "== Remote identity =="
+            whoami
+            id
+            
+            # Check if xcited user exists, fallback to current user if not
+            if ! id -u "${OWNER_USER}" >/dev/null 2>&1; then
+              echo "WARN: user '${OWNER_USER}' does not exist. Falling back to '${REMOTE_USER}'."
+              OWNER_USER="${REMOTE_USER}"
+              OWNER_GROUP="${REMOTE_GROUP}"
+            fi
+            if ! getent group "${OWNER_GROUP}" >/dev/null 2>&1; then
+              echo "WARN: group '${OWNER_GROUP}' does not exist. Falling back to '${REMOTE_GROUP}'."
+              OWNER_GROUP="${REMOTE_GROUP}"
+            fi
+            
+            echo "== Ensure target directory exists =="
+            mkdir -p "${TARGET}"
+            
+            echo "== Set correct ownership and permissions =="
+            # Set ownership to xcited user (or fallback)
+            chown -R "${OWNER_USER}:${OWNER_GROUP}" "${TARGET}" || {
+              echo "WARN: chown failed, trying with sudo..."
+              sudo chown -R "${OWNER_USER}:${OWNER_GROUP}" "${TARGET}" || echo "⚠️  Ownership change failed"
+            }
+            
+            # Set correct permissions for directories and files
+            find "${TARGET}" -type d -exec chmod 755 {} \; 2>/dev/null || {
+              echo "WARN: chmod directories failed, trying with sudo..."
+              sudo find "${TARGET}" -type d -exec chmod 755 {} \; || echo "⚠️  Directory permissions failed"
+            }
+            
+            find "${TARGET}" -type f -exec chmod 644 {} \; 2>/dev/null || {
+              echo "WARN: chmod files failed, trying with sudo..."
+              sudo find "${TARGET}" -type f -exec chmod 644 {} \; || echo "⚠️  File permissions failed"
+            }
+            
+            # Ensure user has read/write/execute on directories
+            chmod -R u+rwX "${TARGET}" 2>/dev/null || {
+              echo "WARN: chmod u+rwX failed, trying with sudo..."
+              sudo chmod -R u+rwX "${TARGET}" || echo "⚠️  User permissions failed"
+            }
+            
+            echo "✅ Permissions set correctly"
+            echo "   Owner: ${OWNER_USER}:${OWNER_GROUP}"
+            echo "   Target: ${TARGET}"
+            
+            cd "${TARGET}"
             
             echo "✅ Files deployed"
             
