@@ -39,13 +39,19 @@ jobs:
           mkdir -p deploy-package
           # Copy standalone build
           if [ -d ".next/standalone" ]; then
+            echo "✅ Found standalone build"
             cp -r .next/standalone/* deploy-package/
+            mkdir -p deploy-package/.next
             cp -r .next/static deploy-package/.next/static
-            cp -r public deploy-package/public
+            if [ -d "public" ]; then
+              cp -r public deploy-package/public
+            fi
           else
-            # Fallback: copy regular build
+            echo "⚠️  No standalone build, using regular build"
             cp -r .next deploy-package/
-            cp -r public deploy-package/
+            if [ -d "public" ]; then
+              cp -r public deploy-package/
+            fi
           fi
           # Copy necessary files
           cp -r prisma deploy-package/
