@@ -49,7 +49,7 @@ jobs:
         with:
           host: ${{ secrets.CWP_HOST }}
           username: ${{ secrets.CWP_USER }}
-          key: ${{ secrets.CWP_SSH_KEY }}
+          password: ${{ secrets.CWP_SSH_KEY }}
           port: ${{ secrets.CWP_PORT || 22 }}
           source: "deploy-package/*"
           target: "/home/xcited/public_html"
@@ -60,7 +60,7 @@ jobs:
         with:
           host: ${{ secrets.CWP_HOST }}
           username: ${{ secrets.CWP_USER }}
-          key: ${{ secrets.CWP_SSH_KEY }}
+          password: ${{ secrets.CWP_SSH_KEY }}
           port: ${{ secrets.CWP_PORT || 22 }}
           script: |
             cd /home/xcited/public_html

@@ -47,7 +47,7 @@ EOF
         with:
           host: ${{ secrets.CWP_HOST }}
           username: ${{ secrets.CWP_USER }}
-          key: ${{ secrets.CWP_SSH_KEY }}
+          password: ${{ secrets.CWP_SSH_KEY }}
           port: ${{ secrets.CWP_PORT || 22 }}
           source: ".env.production"
           target: "/home/xcited/public_html/.env.production"
@@ -58,7 +58,7 @@ EOF
         with:
           host: ${{ secrets.CWP_HOST }}
           username: ${{ secrets.CWP_USER }}
-          key: ${{ secrets.CWP_SSH_KEY }}
+          password: ${{ secrets.CWP_SSH_KEY }}
           port: ${{ secrets.CWP_PORT || 22 }}
           script: |
             set -e
