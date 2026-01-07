@@ -39,13 +39,18 @@ jobs:
           mkdir -p deploy-package
           # Copy standalone build
           if [ -d ".next/standalone" ]; then
+            echo "✅ Found standalone build, copying..."
             cp -r .next/standalone/* deploy-package/
+            mkdir -p deploy-package/.next
             cp -r .next/static deploy-package/.next/static
             cp -r public deploy-package/public
+            echo "✅ Standalone build copied"
           else
+            echo "⚠️  No standalone build found, using regular build..."
             # Fallback: copy regular build
             cp -r .next deploy-package/
             cp -r public deploy-package/
+            echo "✅ Regular build copied"
           fi
           # Copy necessary files
           cp -r prisma deploy-package/
@@ -132,9 +137,18 @@ EOF
             
             # Start with ecosystem.config.js if it exists, otherwise use server.js
             if [ -f "ecosystem.config.js" ]; then
-              pm2 start ecosystem.config.js
+              pm2 start ecosystem.config.js || {
+                echo "⚠️  Failed to start with ecosystem.config.js, trying server.js directly..."
+                if [ -f "server.js" ]; then
+                  pm2 start server.js --name "xcited-web" --instances 2 --exec-mode cluster --env PORT=3001
+                else
+                  echo "❌ ERROR: No server.js found!"
+                  ls -la
+                  exit 1
+                fi
+              }
             elif [ -f "server.js" ]; then
-              pm2 start server.js --name "xcited-web" --instances 2 --exec-mode cluster
+              pm2 start server.js --name "xcited-web" --instances 2 --exec-mode cluster --env PORT=3001
             else
               echo "❌ ERROR: No server.js or ecosystem.config.js found!"
               echo "📋 Files in directory:"
