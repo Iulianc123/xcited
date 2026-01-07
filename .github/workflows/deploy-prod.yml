@@ -441,8 +441,35 @@ jobs:
               SELINUX_STATUS=$(getenforce 2>/dev/null || echo "Disabled")
               echo "   SELinux status: ${SELINUX_STATUS}"
               if [ "${SELINUX_STATUS}" != "Disabled" ]; then
-                echo "   ⚠️  WARN: SELinux is enabled - may need context fix"
-                echo "      Run: sudo chcon -R -t httpd_sys_content_t ${TARGET}"
+                echo "   ⚠️  WARN: SELinux is enabled - fixing context..."
+                sudo chcon -R -t httpd_sys_content_t "${TARGET}" 2>/dev/null || echo "   ⚠️  SELinux context fix failed"
               fi
             fi
+            
+            # Final PM2 status and logs
+            echo ""
+            echo "🔍 Final PM2 Status:"
+            pm2 list
+            echo ""
+            echo "🔍 PM2 Process Info:"
+            pm2 describe xcited-web 2>/dev/null || echo "   ⚠️  Process not found"
+            echo ""
+            echo "🔍 Last 30 lines of PM2 error log:"
+            pm2 logs xcited-web --lines 30 --nostream --err 2>/dev/null || echo "   No error logs"
+            echo ""
+            echo "🔍 Last 30 lines of PM2 output log:"
+            pm2 logs xcited-web --lines 30 --nostream --out 2>/dev/null || echo "   No output logs"
+            echo ""
+            echo "🔍 Testing application on port 3001:"
+            if curl -f -s http://localhost:3001 >/dev/null 2>&1; then
+              echo "   ✅ Application responds on port 3001"
+              curl -I http://localhost:3001 2>/dev/null | head -5
+            else
+              echo "   ❌ Application does NOT respond on port 3001"
+              echo "   Checking if port is listening:"
+              netstat -tulpn | grep 3001 || ss -tulpn | grep 3001 || echo "   Port 3001 is not listening"
+            fi
+            echo ""
+            echo "🔍 Apache error logs (last 20 lines):"
+            tail -20 /var/log/httpd/xcited_error.log 2>/dev/null || echo "   No Apache error logs found"
 
