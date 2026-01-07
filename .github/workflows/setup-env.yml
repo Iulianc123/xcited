@@ -27,7 +27,7 @@ DATABASE_URL=${{ secrets.DATABASE_URL }}
 
 # NextAuth
 NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}
-NEXTAUTH_URL=${{ secrets.NEXTAUTH_URL || 'https://xcited.org' }}
+NEXTAUTH_URL=${{ secrets.NEXTAUTH_URL || 'https://xcited.ro' }}
 
 # Email (for NextAuth)
 EMAIL_SERVER_HOST=${{ secrets.EMAIL_SERVER_HOST }}

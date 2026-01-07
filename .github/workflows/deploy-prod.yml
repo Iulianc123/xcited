@@ -32,7 +32,7 @@ jobs:
           NODE_ENV: production
           DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgresql://placeholder' }}
           NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET || 'placeholder-secret-min-32-chars-long' }}
-          NEXTAUTH_URL: ${{ secrets.NEXTAUTH_URL || 'https://xcited.org' }}
+          NEXTAUTH_URL: ${{ secrets.NEXTAUTH_URL || 'https://xcited.ro' }}
 
       - name: Create deployment package
         run: |
