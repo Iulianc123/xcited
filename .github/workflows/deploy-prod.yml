@@ -107,19 +107,33 @@ EOF
             if [ ! -d "/home/xcited/public_html" ]; then
               echo "📁 Creating directory /home/xcited/public_html..."
               mkdir -p /home/xcited/public_html
-              chown -R xcited:xcited /home/xcited/public_html 2>/dev/null || chown -R root:root /home/xcited/public_html
+              chown -R xcited:xcited /home/xcited/public_html 2>/dev/null || chown -R root:root /home/xcited/public_html || echo "⚠️  Could not change ownership, continuing..."
             fi
             
-            cd /home/xcited/public_html
-            pwd
-            ls -la
+            cd /home/xcited/public_html || {
+              echo "❌ ERROR: Cannot cd to /home/xcited/public_html"
+              exit 1
+            }
+            echo "📂 Current directory: $(pwd)"
+            echo "📋 Files:"
+            ls -la || echo "⚠️  ls failed, directory might be empty"
             
             echo "📦 Installing production dependencies..."
             if [ -f "package-lock.json" ]; then
-              npm ci --production --frozen-lockfile || npm install --production
+              npm ci --production --frozen-lockfile || {
+                echo "⚠️  npm ci failed, trying npm install..."
+                npm install --production || {
+                  echo "❌ npm install failed"
+                  exit 1
+                }
+              }
             else
-              npm install --production
+              npm install --production || {
+                echo "❌ npm install failed"
+                exit 1
+              }
             fi
+            echo "✅ Dependencies installed"
             
             echo "🔧 Generating Prisma Client..."
             if [ -d "prisma" ]; then
@@ -133,22 +147,38 @@ EOF
             
             echo "🔄 Restarting application with PM2..."
             # Stop existing process
-            pm2 delete xcited-web 2>/dev/null || true
+            pm2 delete xcited-web 2>/dev/null || echo "⚠️  No existing process to delete"
+            
+            # Check what files we have
+            echo "📋 Checking files..."
+            ls -la server.js ecosystem.config.js 2>/dev/null || echo "⚠️  Some files not found"
             
             # Start with ecosystem.config.js if it exists, otherwise use server.js
             if [ -f "ecosystem.config.js" ]; then
+              echo "✅ Starting with ecosystem.config.js..."
               pm2 start ecosystem.config.js || {
                 echo "⚠️  Failed to start with ecosystem.config.js, trying server.js directly..."
                 if [ -f "server.js" ]; then
-                  pm2 start server.js --name "xcited-web" --instances 2 --exec-mode cluster --env PORT=3001
+                  echo "✅ Starting with server.js..."
+                  pm2 start server.js --name "xcited-web" --instances 2 --exec-mode cluster --env PORT=3001 || {
+                    echo "❌ Failed to start server.js"
+                    pm2 list
+                    exit 1
+                  }
                 else
                   echo "❌ ERROR: No server.js found!"
+                  echo "📋 Files in directory:"
                   ls -la
                   exit 1
                 fi
               }
             elif [ -f "server.js" ]; then
-              pm2 start server.js --name "xcited-web" --instances 2 --exec-mode cluster --env PORT=3001
+              echo "✅ Starting with server.js..."
+              pm2 start server.js --name "xcited-web" --instances 2 --exec-mode cluster --env PORT=3001 || {
+                echo "❌ Failed to start server.js"
+                pm2 list
+                exit 1
+              }
             else
               echo "❌ ERROR: No server.js or ecosystem.config.js found!"
               echo "📋 Files in directory:"
@@ -156,7 +186,8 @@ EOF
               exit 1
             fi
             
-            pm2 save
+            pm2 save || echo "⚠️  pm2 save failed"
+            echo "📊 PM2 processes:"
             pm2 list
             
             echo "✅ Deployment completed successfully!"
