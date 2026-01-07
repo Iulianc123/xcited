@@ -1,0 +1,88 @@
+name: Setup xcited Server (CWP7pro)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  setup-server:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup server infrastructure
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.CWP_HOST }}
+          username: ${{ secrets.CWP_USER }}
+          password: ${{ secrets.CWP_SSH_KEY }}
+          port: ${{ secrets.CWP_PORT || 22 }}
+          script: |
+            set -e
+            echo "🔧 Setting up xcited server infrastructure..."
+            
+            # Create user if it doesn't exist
+            if ! id -u xcited >/dev/null 2>&1; then
+              echo "👤 Creating user xcited..."
+              useradd -m -s /bin/bash xcited || echo "⚠️  User creation failed (may already exist)"
+            else
+              echo "✅ User xcited already exists"
+            fi
+            
+            # Create directory structure
+            echo "📁 Creating directory structure..."
+            mkdir -p /home/xcited/public_html
+            chown -R xcited:xcited /home/xcited/public_html
+            chmod 755 /home/xcited/public_html
+            
+            # Install Node.js 20 if not present
+            if ! command -v node >/dev/null 2>&1 || [ "$(node -v | cut -d'v' -f2 | cut -d'.' -f1)" -lt 20 ]; then
+              echo "📦 Installing Node.js 20..."
+              curl -fsSL https://rpm.nodesource.com/setup_20.x | bash - || echo "⚠️  Node.js setup failed"
+              yum install -y nodejs || echo "⚠️  Node.js install failed"
+            else
+              echo "✅ Node.js already installed: $(node -v)"
+            fi
+            
+            # Install PM2 if not present
+            if ! command -v pm2 >/dev/null 2>&1; then
+              echo "📦 Installing PM2..."
+              npm install -g pm2 || echo "⚠️  PM2 install failed"
+            else
+              echo "✅ PM2 already installed: $(pm2 -v)"
+            fi
+            
+            # Configure PM2 startup
+            echo "⚙️  Configuring PM2 startup..."
+            pm2 startup systemd -u root --hp /root 2>/dev/null || echo "⚠️  PM2 startup config failed (may already be configured)"
+            
+            # Create Apache reverse proxy configuration
+            echo "🌐 Configuring Apache reverse proxy..."
+            cat > /etc/httpd/conf.d/xcited.conf << 'APACHE_EOF'
+<VirtualHost *:80>
+    ServerName xcited.ro
+    ServerAlias www.xcited.ro
+    
+    ProxyPreserveHost On
+    ProxyPass / http://localhost:3001/
+    ProxyPassReverse / http://localhost:3001/
+    
+    ErrorLog /var/log/httpd/xcited_error.log
+    CustomLog /var/log/httpd/xcited_access.log combined
+</VirtualHost>
+APACHE_EOF
+            
+            # Test Apache configuration
+            if httpd -t 2>/dev/null; then
+              echo "✅ Apache configuration is valid"
+              systemctl reload httpd || systemctl restart httpd || echo "⚠️  Apache reload failed"
+            else
+              echo "⚠️  Apache configuration has errors, check manually"
+            fi
+            
+            echo "✅ Server setup completed!"
+            echo ""
+            echo "📋 Summary:"
+            echo "   - User: xcited"
+            echo "   - Directory: /home/xcited/public_html"
+            echo "   - Node.js: $(node -v 2>/dev/null || echo 'not installed')"
+            echo "   - PM2: $(pm2 -v 2>/dev/null || echo 'not installed')"
+            echo "   - Apache: reverse proxy configured for xcited.ro -> localhost:3001"
+
