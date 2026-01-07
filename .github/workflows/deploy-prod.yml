@@ -98,6 +98,51 @@ jobs:
           echo '  }]' >> deploy-package/ecosystem.config.js
           echo '}' >> deploy-package/ecosystem.config.js
 
+      - name: Pre-deploy: Ensure directory permissions
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.CWP_HOST }}
+          username: ${{ secrets.CWP_USER }}
+          password: ${{ secrets.CWP_SSH_KEY }}
+          port: ${{ secrets.CWP_PORT || 22 }}
+          script: |
+            set -e
+            TARGET="/home/xcited/public_html"
+            OWNER_USER="xcited"
+            OWNER_GROUP="xcited"
+            
+            echo "== Pre-deploy: Ensure directory is ready =="
+            
+            # Verify user exists
+            if ! id -u "${OWNER_USER}" >/dev/null 2>&1; then
+              echo "⚠️  ERROR: user '${OWNER_USER}' does not exist!"
+              exit 1
+            fi
+            
+            # Ensure target directory exists and has correct ownership
+            mkdir -p "${TARGET}"
+            
+            # Set ownership BEFORE SCP (critical!)
+            echo "🔧 Setting ownership BEFORE SCP..."
+            if sudo -n true 2>/dev/null; then
+              sudo -n chown -R "${OWNER_USER}:${OWNER_GROUP}" "${TARGET}" || true
+              sudo -n chmod -R u+rwX "${TARGET}" || true
+            else
+              chown -R "${OWNER_USER}:${OWNER_GROUP}" "${TARGET}" || true
+              chmod -R u+rwX "${TARGET}" || true
+            fi
+            
+            # Verify writable
+            if ! ( touch "${TARGET}/.gha_write_test" && rm -f "${TARGET}/.gha_write_test" ); then
+              echo "⚠️  WARN: ${TARGET} is not writable"
+              if sudo -n true 2>/dev/null; then
+                sudo -n chown -R "${OWNER_USER}:${OWNER_GROUP}" "${TARGET}" || true
+                sudo -n chmod -R u+rwX "${TARGET}" || true
+              fi
+            fi
+            
+            echo "✅ Directory ready for SCP"
+
       - name: Deploy to CWP7pro Production
         uses: appleboy/scp-action@master
         with:
@@ -151,51 +196,62 @@ jobs:
             echo "== Ensure target directory exists =="
             mkdir -p "${TARGET}"
             
-            echo "== Set correct ownership and permissions =="
-            # Set ownership to xcited user (or fallback)
-            # CRITICAL: Use sudo to ensure ownership change works even if files are owned by root
-            # This is necessary because SCP may copy files as root
+            echo "== Set correct ownership and permissions (POST-SCP) =="
+            # CRITICAL: SCP may copy files as root, so we MUST fix ownership after SCP
+            # Use sudo -n (non-interactive) to ensure it works even if we're already root
             echo "🔧 Setting ownership to ${OWNER_USER}:${OWNER_GROUP}..."
             
-            # Try with sudo first (most reliable)
-            sudo chown -R "${OWNER_USER}:${OWNER_GROUP}" "${TARGET}" 2>&1 || {
-              echo "⚠️  sudo chown failed, trying without sudo..."
-              chown -R "${OWNER_USER}:${OWNER_GROUP}" "${TARGET}" 2>&1 || {
-                echo "❌ Ownership change failed completely"
-                echo "   This may cause 'Forbidden' errors"
-                echo "   Manual fix needed: sudo chown -R ${OWNER_USER}:${OWNER_GROUP} ${TARGET}"
+            # Use sudo -n (non-interactive) like 1dream does
+            if sudo -n true 2>/dev/null; then
+              echo "   Using sudo -n (non-interactive)..."
+              sudo -n chown -R "${OWNER_USER}:${OWNER_GROUP}" "${TARGET}" || {
+                echo "⚠️  sudo -n chown failed, trying without -n..."
+                sudo chown -R "${OWNER_USER}:${OWNER_GROUP}" "${TARGET}" || {
+                  echo "❌ Ownership change failed"
+                  exit 1
+                }
               }
-            }
+            else
+              # If we're already root, chown should work directly
+              chown -R "${OWNER_USER}:${OWNER_GROUP}" "${TARGET}" || {
+                echo "❌ Ownership change failed (not root and no sudo)"
+                exit 1
+              }
+            fi
             
             # Verify ownership was set correctly
             echo "🔍 Verifying ownership..."
-            WRONG_OWNER=$(find "${TARGET}" ! -user "${OWNER_USER}" -o ! -group "${OWNER_GROUP}" 2>/dev/null | head -5)
+            WRONG_OWNER=$(find "${TARGET}" ! -user "${OWNER_USER}" -o ! -group "${OWNER_GROUP}" 2>/dev/null | head -10)
             if [ -n "$WRONG_OWNER" ]; then
               echo "⚠️  WARNING: Some files still have wrong ownership:"
               echo "$WRONG_OWNER"
-              echo "   Attempting to fix with sudo..."
-              sudo find "${TARGET}" ! -user "${OWNER_USER}" -exec chown "${OWNER_USER}:${OWNER_GROUP}" {} \; 2>/dev/null || true
-              sudo find "${TARGET}" ! -group "${OWNER_GROUP}" -exec chgrp "${OWNER_GROUP}" {} \; 2>/dev/null || true
+              echo "   Attempting aggressive fix..."
+              if sudo -n true 2>/dev/null; then
+                sudo -n find "${TARGET}" ! -user "${OWNER_USER}" -exec chown "${OWNER_USER}:${OWNER_GROUP}" {} \; 2>/dev/null || true
+                sudo -n find "${TARGET}" ! -group "${OWNER_GROUP}" -exec chgrp "${OWNER_GROUP}" {} \; 2>/dev/null || true
+              fi
             else
               echo "✅ All files have correct ownership: ${OWNER_USER}:${OWNER_GROUP}"
             fi
             
-            # Set correct permissions for directories and files
-            find "${TARGET}" -type d -exec chmod 755 {} \; 2>/dev/null || {
-              echo "WARN: chmod directories failed, trying with sudo..."
-              sudo find "${TARGET}" -type d -exec chmod 755 {} \; || echo "⚠️  Directory permissions failed"
-            }
+            # Set correct permissions for directories and files (like 1dream)
+            echo "🔧 Setting permissions..."
+            if sudo -n true 2>/dev/null; then
+              sudo -n find "${TARGET}" -type d -exec chmod 755 {} \; || true
+              sudo -n find "${TARGET}" -type f -exec chmod 644 {} \; || true
+              sudo -n chmod -R u+rwX "${TARGET}" || true
+            else
+              find "${TARGET}" -type d -exec chmod 755 {} \; || true
+              find "${TARGET}" -type f -exec chmod 644 {} \; || true
+              chmod -R u+rwX "${TARGET}" || true
+            fi
             
-            find "${TARGET}" -type f -exec chmod 644 {} \; 2>/dev/null || {
-              echo "WARN: chmod files failed, trying with sudo..."
-              sudo find "${TARGET}" -type f -exec chmod 644 {} \; || echo "⚠️  File permissions failed"
-            }
-            
-            # Ensure user has read/write/execute on directories
-            chmod -R u+rwX "${TARGET}" 2>/dev/null || {
-              echo "WARN: chmod u+rwX failed, trying with sudo..."
-              sudo chmod -R u+rwX "${TARGET}" || echo "⚠️  User permissions failed"
-            }
+            # Final verification
+            echo "🔍 Final ownership verification..."
+            ls -ld "${TARGET}"
+            ls -la "${TARGET}" | head -10
+            echo "   Owner: $(stat -c '%U:%G' "${TARGET}" 2>/dev/null || echo 'unknown')"
+            echo "   Permissions: $(stat -c '%a' "${TARGET}" 2>/dev/null || echo 'unknown')"
             
             echo "✅ Permissions set correctly"
             echo "   Owner: ${OWNER_USER}:${OWNER_GROUP}"
@@ -308,8 +364,32 @@ jobs:
             fi
             
             # Final permissions check for Apache
-            echo "🔍 Final permissions check..."
-            ls -la "${TARGET}" | head -10
+            echo "🔍 Final permissions check for Apache..."
+            echo "   Target directory:"
+            ls -ld "${TARGET}"
+            echo "   Sample files:"
+            ls -la "${TARGET}" | head -15
             echo "   Owner: $(stat -c '%U:%G' "${TARGET}" 2>/dev/null || echo 'unknown')"
             echo "   Permissions: $(stat -c '%a' "${TARGET}" 2>/dev/null || echo 'unknown')"
+            
+            # Check if Apache can access (if running as apache user)
+            if id apache >/dev/null 2>&1; then
+              echo "   Apache user exists, checking access..."
+              # Apache should be able to read files with 644 and directories with 755
+              if [ -r "${TARGET}" ]; then
+                echo "   ✅ Apache can read target directory"
+              else
+                echo "   ⚠️  WARN: Apache may not be able to read target directory"
+              fi
+            fi
+            
+            # Check SELinux context (if applicable)
+            if command -v getenforce >/dev/null 2>&1; then
+              SELINUX_STATUS=$(getenforce 2>/dev/null || echo "Disabled")
+              echo "   SELinux status: ${SELINUX_STATUS}"
+              if [ "${SELINUX_STATUS}" != "Disabled" ]; then
+                echo "   ⚠️  WARN: SELinux is enabled - may need context fix"
+                echo "      Run: sudo chcon -R -t httpd_sys_content_t ${TARGET}"
+              fi
+            fi
 
