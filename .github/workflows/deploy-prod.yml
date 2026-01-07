@@ -33,16 +33,65 @@ jobs:
 
       - name: Create deployment package
         run: |
+          rm -rf deploy-package
           mkdir -p deploy-package
-          cp -r .next deploy-package/
-          cp -r public deploy-package/
-          cp package.json deploy-package/
-          cp next.config.ts deploy-package/
-          cp tsconfig.json deploy-package/
-          cp package-lock.json deploy-package/ 2>/dev/null || true
+          
+          # Next.js standalone output (like 1dream)
+          if [ -d ".next/standalone" ]; then
+            echo "✅ Found standalone build"
+            cp -R .next/standalone/* deploy-package/
+            
+            # Static assets must be copied into the standalone folder structure
+            mkdir -p deploy-package/.next
+            cp -R .next/static deploy-package/.next/static
+            
+            # public/ is optional in Next.js projects
+            if [ -d "public" ]; then
+              cp -R public deploy-package/public
+            fi
+          else
+            echo "⚠️  No standalone build, using regular build"
+            cp -r .next deploy-package/
+            if [ -d "public" ]; then
+              cp -r public deploy-package/
+            fi
+          fi
+          
+          # Copy necessary files
           if [ -d "prisma" ]; then
             cp -r prisma deploy-package/
           fi
+          cp package.json deploy-package/
+          cp package-lock.json deploy-package/ 2>/dev/null || true
+          cp next.config.ts deploy-package/
+          cp tsconfig.json deploy-package/
+          
+          # Copy Prisma generated client
+          if [ -d "node_modules/.prisma" ]; then
+            mkdir -p deploy-package/node_modules
+            cp -r node_modules/.prisma deploy-package/node_modules/ 2>/dev/null || true
+          fi
+          
+          # Create ecosystem.config.js for PM2 (like 1dream - using echo to avoid YAML issues)
+          echo 'module.exports = {' > deploy-package/ecosystem.config.js
+          echo '  apps: [{' >> deploy-package/ecosystem.config.js
+          echo "    name: 'xcited-web'," >> deploy-package/ecosystem.config.js
+          echo "    script: 'server.js'," >> deploy-package/ecosystem.config.js
+          echo "    cwd: '/home/xcited/public_html'," >> deploy-package/ecosystem.config.js
+          echo '    instances: 2,' >> deploy-package/ecosystem.config.js
+          echo "    exec_mode: 'cluster'," >> deploy-package/ecosystem.config.js
+          echo '    env: {' >> deploy-package/ecosystem.config.js
+          echo "      NODE_ENV: 'production'," >> deploy-package/ecosystem.config.js
+          echo '      PORT: 3001' >> deploy-package/ecosystem.config.js
+          echo '    },' >> deploy-package/ecosystem.config.js
+          echo "    error_file: '/var/log/pm2/xcited-web-error.log'," >> deploy-package/ecosystem.config.js
+          echo "    out_file: '/var/log/pm2/xcited-web-out.log'," >> deploy-package/ecosystem.config.js
+          echo "    log_date_format: 'YYYY-MM-DD HH:mm:ss Z'," >> deploy-package/ecosystem.config.js
+          echo '    merge_logs: true,' >> deploy-package/ecosystem.config.js
+          echo '    autorestart: true,' >> deploy-package/ecosystem.config.js
+          echo "    max_memory_restart: '1G'" >> deploy-package/ecosystem.config.js
+          echo '  }]' >> deploy-package/ecosystem.config.js
+          echo '}' >> deploy-package/ecosystem.config.js
 
       - name: Deploy to CWP7pro Production
         uses: appleboy/scp-action@master
@@ -63,14 +112,42 @@ jobs:
           password: ${{ secrets.CWP_SSH_KEY }}
           port: ${{ secrets.CWP_PORT || 22 }}
           script: |
+            set -e
             cd /home/xcited/public_html
-            npm install --production || npm ci --production --frozen-lockfile
+            
+            # Ensure directory exists and has correct permissions
+            mkdir -p /home/xcited/public_html
+            chown -R xcited:xcited /home/xcited/public_html 2>/dev/null || true
+            
+            echo "✅ Files deployed"
+            
+            # Install dependencies (for standalone build, minimal install needed)
+            if [ -f "package.json" ]; then
+              npm install --production || npm ci --production --frozen-lockfile || echo "⚠️  npm install failed (continuing...)"
+            fi
+            
+            # Prisma setup
             if [ -d "prisma" ]; then
               npx prisma generate || echo "⚠️  Prisma generate failed (continuing...)"
               if [ -n "${{ secrets.DATABASE_URL }}" ] && [ "${{ secrets.DATABASE_URL }}" != "postgresql://user:pass@localhost:5432/xcited" ]; then
                 DATABASE_URL="${{ secrets.DATABASE_URL }}" npx prisma migrate deploy || echo "⚠️  Migrations failed (continuing...)"
               fi
             fi
-            pm2 restart xcited-web || pm2 start npm --name "xcited-web" -- start
+            
+            # PM2 management
+            echo "🔄 Managing PM2 process..."
+            pm2 delete xcited-web 2>/dev/null || true
+            
+            # Start with ecosystem.config.js if it exists and server.js exists
+            if [ -f "ecosystem.config.js" ] && [ -f "server.js" ]; then
+              pm2 start ecosystem.config.js
+            elif [ -f "server.js" ]; then
+              pm2 start server.js --name "xcited-web" --instances 2 --exec-mode cluster
+            else
+              echo "⚠️  server.js not found, cannot start PM2"
+              exit 1
+            fi
+            
             pm2 save
+            echo "✅ Application started with PM2"
 
