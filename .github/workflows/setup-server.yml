@@ -68,32 +68,81 @@ jobs:
             
             # Create Apache reverse proxy configuration
             echo "🌐 Configuring Apache reverse proxy..."
-            echo '<VirtualHost *:80>' > /etc/httpd/conf.d/xcited.conf
-            echo '    ServerName xcited.ro' >> /etc/httpd/conf.d/xcited.conf
-            echo '    ServerAlias www.xcited.ro' >> /etc/httpd/conf.d/xcited.conf
-            echo '    DocumentRoot /home/xcited/public_html' >> /etc/httpd/conf.d/xcited.conf
-            echo '' >> /etc/httpd/conf.d/xcited.conf
-            echo '    <Directory /home/xcited/public_html>' >> /etc/httpd/conf.d/xcited.conf
-            echo '        Options -Indexes +FollowSymLinks' >> /etc/httpd/conf.d/xcited.conf
-            echo '        AllowOverride None' >> /etc/httpd/conf.d/xcited.conf
-            echo '        Require all granted' >> /etc/httpd/conf.d/xcited.conf
-            echo '    </Directory>' >> /etc/httpd/conf.d/xcited.conf
-            echo '' >> /etc/httpd/conf.d/xcited.conf
-            echo '    ProxyPreserveHost On' >> /etc/httpd/conf.d/xcited.conf
-            echo '    ProxyPass / http://localhost:3002/' >> /etc/httpd/conf.d/xcited.conf
-            echo '    ProxyPassReverse / http://localhost:3002/' >> /etc/httpd/conf.d/xcited.conf
-            echo '' >> /etc/httpd/conf.d/xcited.conf
-            echo '    ErrorLog /var/log/httpd/xcited_error.log' >> /etc/httpd/conf.d/xcited.conf
-            echo '    CustomLog /var/log/httpd/xcited_access.log combined' >> /etc/httpd/conf.d/xcited.conf
-            echo '    LogLevel warn' >> /etc/httpd/conf.d/xcited.conf
-            echo '</VirtualHost>' >> /etc/httpd/conf.d/xcited.conf
             
-            # Test Apache configuration
-            if httpd -t 2>/dev/null; then
-              echo "✅ Apache configuration is valid"
-              systemctl reload httpd || systemctl restart httpd || echo "⚠️  Apache reload failed"
+            # Backup existing config if it exists
+            if [ -f /etc/httpd/conf.d/xcited.conf ]; then
+              cp /etc/httpd/conf.d/xcited.conf /etc/httpd/conf.d/xcited.conf.backup.$(date +%s)
+              echo "   ✅ Backed up existing config"
+            fi
+            
+            # Create new Apache config
+            cat > /etc/httpd/conf.d/xcited.conf << 'APACHE_EOF'
+<VirtualHost *:80>
+    ServerName xcited.ro
+    ServerAlias www.xcited.ro
+    
+    # Disable DocumentRoot serving (we use reverse proxy)
+    DocumentRoot /home/xcited/public_html
+    
+    <Directory /home/xcited/public_html>
+        Options -Indexes +FollowSymLinks
+        AllowOverride None
+        Require all granted
+    </Directory>
+    
+    # Reverse Proxy Configuration
+    ProxyPreserveHost On
+    ProxyPass / http://127.0.0.1:3002/
+    ProxyPassReverse / http://127.0.0.1:3002/
+    
+    # Proxy settings
+    ProxyRequests Off
+    ProxyTimeout 300
+    
+    # Headers for Next.js
+    RequestHeader set X-Forwarded-Proto "http"
+    RequestHeader set X-Forwarded-For "%{REMOTE_ADDR}e"
+    
+    # Error handling
+    ProxyErrorOverride Off
+    
+    # Logging
+    ErrorLog /var/log/httpd/xcited_error.log
+    CustomLog /var/log/httpd/xcited_access.log combined
+    LogLevel warn
+</VirtualHost>
+APACHE_EOF
+            
+            echo "   ✅ Apache config created at /etc/httpd/conf.d/xcited.conf"
+            
+            # Verify Apache config syntax
+            echo "🔍 Testing Apache configuration..."
+            if httpd -t 2>/dev/null || apache2ctl -t 2>/dev/null; then
+              echo "   ✅ Apache configuration is valid"
+              
+              # Reload Apache
+              echo "🔄 Reloading Apache..."
+              if systemctl reload httpd 2>/dev/null || systemctl reload apache2 2>/dev/null; then
+                echo "   ✅ Apache reloaded successfully"
+              elif systemctl restart httpd 2>/dev/null || systemctl restart apache2 2>/dev/null; then
+                echo "   ✅ Apache restarted successfully"
+              else
+                echo "   ⚠️  Apache reload/restart failed, may need manual restart"
+              fi
             else
-              echo "⚠️  Apache configuration has errors, check manually"
+              echo "   ❌ Apache configuration has errors!"
+              echo "   Checking syntax errors..."
+              httpd -t 2>&1 || apache2ctl -t 2>&1 || true
+              echo "   ⚠️  Please fix Apache configuration manually"
+            fi
+            
+            # Verify Apache can access localhost:3002
+            echo "🔍 Verifying Apache can access localhost:3002..."
+            if curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3002 | grep -q "200\|404\|500"; then
+              echo "   ✅ Apache can access localhost:3002"
+            else
+              echo "   ⚠️  WARN: Apache may not be able to access localhost:3002"
+              echo "   This is normal if the app is not running yet"
             fi
             
             echo "✅ Server setup completed!"
