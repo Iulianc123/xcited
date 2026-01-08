@@ -197,7 +197,7 @@ jobs:
           target: "/home/xcited/public_html"
           rm: true
 
-      - name: Run post-deploy script on server
+      - name: Post-deploy - Set permissions
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.CWP_HOST }}
@@ -206,9 +206,6 @@ jobs:
           port: ${{ secrets.CWP_PORT || 22 }}
           script: |
             set -e
-            # Note: This script runs as the user specified in CWP_USER (usually root)
-            # We use sudo where needed, but most commands should work as root
-            
             TARGET="/home/xcited/public_html"
             OWNER_USER="xcited"
             OWNER_GROUP="xcited"
@@ -324,9 +321,19 @@ jobs:
             echo "   Owner: ${OWNER_USER}:${OWNER_GROUP}"
             echo "   Target: ${TARGET}"
             
+      - name: Post-deploy - Setup Node.js and PM2
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.CWP_HOST }}
+          username: ${{ secrets.CWP_USER }}
+          password: ${{ secrets.CWP_SSH_KEY }}
+          port: ${{ secrets.CWP_PORT || 22 }}
+          script: |
+            set -e
+            TARGET="/home/xcited/public_html"
+            OWNER_USER="xcited"
+            OWNER_GROUP="xcited"
             cd "${TARGET}"
-            
-            echo "✅ Files deployed"
             
             # CRITICAL: Ensure Node.js 18+ is available (Next.js 16 requires Node 18+)
             echo "🔍 Checking Node.js version..."
@@ -699,6 +706,17 @@ jobs:
             pm2 save
             echo "✅ PM2 process management completed"
             
+      - name: Post-deploy - Verify and configure Apache
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.CWP_HOST }}
+          username: ${{ secrets.CWP_USER }}
+          password: ${{ secrets.CWP_SSH_KEY }}
+          port: ${{ secrets.CWP_PORT || 22 }}
+          script: |
+            set -e
+            TARGET="/home/xcited/public_html"
+            
             # Test if application responds on port 3002
             echo "🔍 Testing application on port 3002..."
             sleep 2
@@ -920,5 +938,11 @@ jobs:
             fi
             echo ""
             echo "🔍 Apache error logs (last 20 lines):"
-            tail -20 /var/log/httpd/xcited_error.log 2>/dev/null || echo "   No Apache error logs found"
+            if [ -f "/usr/local/apache/logs/xcited_error.log" ]; then
+              tail -20 /usr/local/apache/logs/xcited_error.log 2>/dev/null || echo "   Cannot read error log"
+            elif [ -f "/var/log/httpd/xcited_error.log" ]; then
+              tail -20 /var/log/httpd/xcited_error.log 2>/dev/null || echo "   Cannot read error log"
+            else
+              echo "   No Apache error logs found"
+            fi
 
