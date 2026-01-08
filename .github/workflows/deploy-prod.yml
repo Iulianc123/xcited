@@ -555,12 +555,12 @@ jobs:
               pm2 list
             fi
             
-            # Test if application responds on port 3001
-            echo "🔍 Testing application on port 3001..."
-            if curl -f http://localhost:3001 >/dev/null 2>&1; then
-              echo "✅ Application responds on port 3001"
+            # Test if application responds on port 3002
+            echo "🔍 Testing application on port 3002..."
+            if curl -f http://localhost:3002 >/dev/null 2>&1; then
+              echo "✅ Application responds on port 3002"
             else
-              echo "⚠️  Application does not respond on port 3001"
+              echo "⚠️  Application does not respond on port 3002"
               echo "   Checking PM2 logs..."
               pm2 logs xcited-web --lines 20 --nostream || echo "   No logs available"
             fi
