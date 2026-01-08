@@ -452,130 +452,26 @@ jobs:
             
             echo "✅ Found server.js at: $SERVER_JS"
             
-            # Update ecosystem.config.js with correct server.js path and Node.js path
-            if [ -f "ecosystem.config.js" ]; then
-              # Update script path in ecosystem.config.js
-              sed -i "s|script: 'server.js'|script: '$SERVER_JS'|g" ecosystem.config.js || true
-              # Update cwd to current directory
-              sed -i "s|cwd: '/home/xcited/public_html'|cwd: '$(pwd)'|g" ecosystem.config.js || true
-              
-              # CRITICAL: Ensure PM2 uses the correct Node.js version
-              # Get the Node.js path we verified earlier (should be system Node.js 20+)
-              NODE_PATH=$(which node 2>/dev/null || echo "/usr/bin/node")
-              
-              # Verify it's the correct version
-              NODE_VER=$($NODE_PATH -v 2>/dev/null || echo "unknown")
-              NODE_MAJOR=$(echo "$NODE_VER" | cut -d'v' -f2 | cut -d'.' -f1)
-              
-              if [ "$NODE_MAJOR" -lt 18 ]; then
-                echo "⚠️  WARN: Node.js at $NODE_PATH is version $NODE_VER (too old)"
-                # Try to find a newer Node.js
-                for path in /usr/bin/node /usr/local/bin/node /opt/nodejs/bin/node; do
-                  if [ -f "$path" ]; then
-                    VER=$($path -v 2>/dev/null || echo "")
-                    if [ -n "$VER" ]; then
-                      MAJOR=$(echo "$VER" | cut -d'v' -f2 | cut -d'.' -f1)
-                      if [ "$MAJOR" -ge 18 ]; then
-                        NODE_PATH="$path"
-                        NODE_VER="$VER"
-                        echo "   ✅ Found better Node.js $VER at: $NODE_PATH"
-                        break
-                      fi
-                    fi
-                  fi
-                done
-              fi
-              
-              echo "🔧 Setting interpreter to: $NODE_PATH (version: $NODE_VER)"
-              # Update interpreter in ecosystem.config.js
-              if ! grep -q "interpreter:" ecosystem.config.js; then
-                # Insert interpreter after script line
-                sed -i "/script:/a\    interpreter: '$NODE_PATH'," ecosystem.config.js || true
-              else
-                # Update existing interpreter with full path
-                sed -i "s|interpreter:.*|interpreter: '$NODE_PATH',|g" ecosystem.config.js || true
-              fi
-              
-              echo "📋 Starting PM2 with ecosystem.config.js..."
-              
-              # CRITICAL: Verify interpreter in ecosystem.config.js
-              INTERPRETER_IN_CONFIG=$(grep "interpreter:" ecosystem.config.js | head -1 | sed "s/.*interpreter: *['\"]\([^'\"]*\)['\"].*/\1/" || echo "")
-              if [ -n "$INTERPRETER_IN_CONFIG" ]; then
-                echo "   Interpreter in config: $INTERPRETER_IN_CONFIG"
-                if [ -f "$INTERPRETER_IN_CONFIG" ]; then
-                  INTERP_VERSION=$($INTERPRETER_IN_CONFIG -v 2>/dev/null || echo "unknown")
-                  echo "   Interpreter version: $INTERP_VERSION"
-                else
-                  echo "   ⚠️  WARN: Interpreter path not found: $INTERPRETER_IN_CONFIG"
-                fi
-              else
-                echo "   ⚠️  WARN: No interpreter found in ecosystem.config.js"
-              fi
-              
-              echo "   Current 'node' command: $(which node 2>/dev/null || echo 'not found')"
-              echo "   Current Node.js version: $(node -v 2>/dev/null || echo 'unknown')"
-              
-              # Start PM2 with explicit PATH to avoid nvm
-              export PATH="/usr/bin:/usr/local/bin:/opt/nodejs/bin:$PATH"
-              pm2 start ecosystem.config.js
+            # Use PM2 directly like wishhub does (simpler and more reliable)
+            # Wishhub doesn't use ecosystem.config.js, it uses pm2 start directly
+            echo "📋 Starting PM2 directly (like wishhub)..."
+            
+            # Set PATH to prioritize system Node.js
+            export PATH="/usr/bin:/usr/local/bin:/opt/nodejs/bin:$PATH"
+            export NODE_ENV="production"
+            export PORT="3001"
+            
+            echo "   Using Node.js: $(which node) ($(node -v 2>/dev/null || echo 'unknown'))"
+            echo "   Script: $SERVER_JS"
+            echo "   Working directory: $(pwd)"
+            
+            # Start PM2 directly like wishhub (no ecosystem.config.js needed)
+            if pm2 describe xcited-web >/dev/null 2>&1; then
+              echo "   Restarting existing process..."
+              pm2 restart xcited-web --update-env
             else
-              # Create ecosystem.config.js if it doesn't exist
-              echo "📝 Creating ecosystem.config.js..."
-              # Get the correct Node.js path (system Node.js, not nvm)
-              NODE_PATH=$(which node 2>/dev/null || echo "/usr/bin/node")
-              
-              # If nvm is active, try to find system Node.js
-              if echo "$NODE_PATH" | grep -q "nvm"; then
-                for path in /usr/bin/node /usr/local/bin/node /opt/nodejs/bin/node; do
-                  if [ -f "$path" ]; then
-                    VER=$($path -v 2>/dev/null || echo "")
-                    if [ -n "$VER" ]; then
-                      MAJOR=$(echo "$VER" | cut -d'v' -f2 | cut -d'.' -f1)
-                      if [ "$MAJOR" -ge 18 ]; then
-                        NODE_PATH="$path"
-                        break
-                      fi
-                    fi
-                  fi
-                done
-              fi
-              
-              echo "   Using Node.js: $NODE_PATH ($($NODE_PATH -v 2>/dev/null || echo 'unknown'))"
-              echo 'module.exports = {' > ecosystem.config.js
-              echo '  apps: [{' >> ecosystem.config.js
-              echo "    name: 'xcited-web'," >> ecosystem.config.js
-              echo "    script: '$SERVER_JS'," >> ecosystem.config.js
-              echo "    interpreter: '$NODE_PATH'," >> ecosystem.config.js
-              echo "    cwd: '$(pwd)'," >> ecosystem.config.js
-              echo '    instances: 2,' >> ecosystem.config.js
-              echo "    exec_mode: 'cluster'," >> ecosystem.config.js
-              echo '    env: {' >> ecosystem.config.js
-              echo "      NODE_ENV: 'production'," >> ecosystem.config.js
-              echo '      PORT: 3001' >> ecosystem.config.js
-              echo '    },' >> ecosystem.config.js
-              echo "    error_file: '/var/log/pm2/xcited-web-error.log'," >> ecosystem.config.js
-              echo "    out_file: '/var/log/pm2/xcited-web-out.log'," >> ecosystem.config.js
-              echo "    log_date_format: 'YYYY-MM-DD HH:mm:ss Z'," >> ecosystem.config.js
-              echo '    merge_logs: true,' >> ecosystem.config.js
-              echo '    autorestart: true,' >> ecosystem.config.js
-              echo "    max_memory_restart: '1G'" >> ecosystem.config.js
-              echo '  }]' >> ecosystem.config.js
-              echo '}' >> ecosystem.config.js
-              
-              # Verify interpreter before starting
-              echo "   Verifying interpreter: $NODE_PATH"
-              if [ -f "$NODE_PATH" ]; then
-                VER=$($NODE_PATH -v 2>/dev/null || echo "unknown")
-                echo "   ✅ Interpreter exists, version: $VER"
-              else
-                echo "   ❌ ERROR: Interpreter not found: $NODE_PATH"
-                exit 1
-              fi
-              
-              # Start PM2 with explicit PATH to avoid nvm
-              export PATH="/usr/bin:/usr/local/bin:/opt/nodejs/bin:$PATH"
-              echo "   Starting PM2 with PATH: $PATH"
-              pm2 start ecosystem.config.js
+              echo "   Starting new process..."
+              pm2 start "$SERVER_JS" --name xcited-web
             fi
             
             pm2 save
