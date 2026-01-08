@@ -693,6 +693,74 @@ jobs:
               pm2 logs xcited-web --lines 50 --nostream --out 2>/dev/null || echo "   No output logs"
             fi
             
+            # Verify and reconfigure Apache reverse proxy
+            echo "🌐 Verifying Apache reverse proxy configuration..."
+            
+            # Check if Apache config exists
+            APACHE_CONFIG="/etc/httpd/conf.d/xcited.conf"
+            if [ ! -f "$APACHE_CONFIG" ]; then
+              echo "   ⚠️  Apache config not found at $APACHE_CONFIG"
+              echo "   Creating Apache reverse proxy configuration..."
+              
+              # Create Apache config
+              cat > "$APACHE_CONFIG" << 'APACHE_EOF'
+<VirtualHost *:80>
+    ServerName xcited.ro
+    ServerAlias www.xcited.ro
+    
+    DocumentRoot /home/xcited/public_html
+    
+    <Directory /home/xcited/public_html>
+        Options -Indexes +FollowSymLinks
+        AllowOverride None
+        Require all granted
+    </Directory>
+    
+    ProxyPreserveHost On
+    ProxyPass / http://127.0.0.1:3002/
+    ProxyPassReverse / http://127.0.0.1:3002/
+    
+    ProxyRequests Off
+    ProxyTimeout 300
+    RequestHeader set X-Forwarded-Proto "http"
+    
+    ErrorLog /var/log/httpd/xcited_error.log
+    CustomLog /var/log/httpd/xcited_access.log combined
+    LogLevel warn
+</VirtualHost>
+APACHE_EOF
+              
+              echo "   ✅ Apache config created"
+            else
+              echo "   ✅ Apache config exists at $APACHE_CONFIG"
+              
+              # Verify config has correct port
+              if ! grep -q "3002" "$APACHE_CONFIG"; then
+                echo "   ⚠️  Apache config does not reference port 3002, updating..."
+                # Update ProxyPass lines
+                sed -i 's|ProxyPass / http://.*:.*/|ProxyPass / http://127.0.0.1:3002/|g' "$APACHE_CONFIG"
+                sed -i 's|ProxyPassReverse / http://.*:.*/|ProxyPassReverse / http://127.0.0.1:3002/|g' "$APACHE_CONFIG"
+                echo "   ✅ Apache config updated"
+              fi
+            fi
+            
+            # Test Apache configuration
+            if httpd -t 2>/dev/null || apache2ctl -t 2>/dev/null; then
+              echo "   ✅ Apache configuration is valid"
+              
+              # Reload Apache
+              if systemctl reload httpd 2>/dev/null || systemctl reload apache2 2>/dev/null; then
+                echo "   ✅ Apache reloaded"
+              elif systemctl restart httpd 2>/dev/null || systemctl restart apache2 2>/dev/null; then
+                echo "   ✅ Apache restarted"
+              else
+                echo "   ⚠️  Apache reload/restart failed"
+              fi
+            else
+              echo "   ❌ Apache configuration has errors!"
+              httpd -t 2>&1 || apache2ctl -t 2>&1 || true
+            fi
+            
             # Final permissions check for Apache
             echo "🔍 Final permissions check for Apache..."
             echo "   Target directory:"
