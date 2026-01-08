@@ -548,30 +548,56 @@ jobs:
             
             # Start PM2 directly like wishhub (no ecosystem.config.js needed)
             echo "📋 Starting PM2 with system Node.js..."
+            echo "   Command: pm2 start \"$SERVER_JS\" --name xcited-web --update-env"
             pm2 start "$SERVER_JS" --name xcited-web --update-env
             
-            pm2 save
-            echo "✅ Application started with PM2"
+            # Wait for process to initialize
+            echo "⏳ Waiting for process to start..."
+            sleep 5
             
-            # Verify application is running
-            echo "🔍 Verifying application..."
-            sleep 3
-            if pm2 describe xcited-web >/dev/null 2>&1; then
-              echo "✅ PM2 process xcited-web is running"
-              pm2 list
-            else
-              echo "⚠️  PM2 process xcited-web not found"
-              pm2 list
+            # Check PM2 status immediately
+            echo "📊 PM2 Status:"
+            pm2 list
+            
+            # Get detailed process info
+            echo "📋 PM2 Process Details:"
+            pm2 describe xcited-web 2>&1 || echo "   ⚠️  Process not found"
+            
+            # Check process status
+            PM2_STATUS=$(pm2 jlist 2>/dev/null | grep -A 10 '"name":"xcited-web"' | grep '"status"' | head -1 | cut -d'"' -f4 || echo "unknown")
+            PM2_RESTARTS=$(pm2 jlist 2>/dev/null | grep -A 10 '"name":"xcited-web"' | grep '"restart_time"' | head -1 | cut -d':' -f2 | tr -d ' ,' || echo "0")
+            
+            echo "   Process status: $PM2_STATUS"
+            echo "   Restart count: $PM2_RESTARTS"
+            
+            if [ "$PM2_STATUS" != "online" ]; then
+              echo "   ⚠️  Process is not online!"
+              echo "   Checking error logs..."
+              pm2 logs xcited-web --lines 50 --nostream --err 2>/dev/null || echo "   No error logs"
+              echo ""
+              echo "   Checking output logs..."
+              pm2 logs xcited-web --lines 50 --nostream --out 2>/dev/null || echo "   No output logs"
             fi
+            
+            pm2 save
+            echo "✅ PM2 process management completed"
             
             # Test if application responds on port 3002
             echo "🔍 Testing application on port 3002..."
-            if curl -f http://localhost:3002 >/dev/null 2>&1; then
+            sleep 2
+            if curl -f -s http://localhost:3002 >/dev/null 2>&1; then
               echo "✅ Application responds on port 3002"
+              curl -I http://localhost:3002 2>/dev/null | head -5
             else
-              echo "⚠️  Application does not respond on port 3002"
-              echo "   Checking PM2 logs..."
-              pm2 logs xcited-web --lines 20 --nostream || echo "   No logs available"
+              echo "❌ Application does NOT respond on port 3002"
+              echo "   Checking if port is listening:"
+              ss -ltnp 2>/dev/null | grep ':3002' || echo "   Port 3002 is not listening"
+              echo ""
+              echo "   Checking PM2 logs for errors:"
+              pm2 logs xcited-web --lines 50 --nostream --err 2>/dev/null || echo "   No error logs"
+              echo ""
+              echo "   Checking PM2 logs for output:"
+              pm2 logs xcited-web --lines 50 --nostream --out 2>/dev/null || echo "   No output logs"
             fi
             
             # Final permissions check for Apache
