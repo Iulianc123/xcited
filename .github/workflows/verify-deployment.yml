@@ -24,13 +24,13 @@ jobs:
             pm2 list || echo "⚠️  PM2 not running or no processes"
             echo ""
             
-            # Check if app is running on port 3001
-            echo "🔍 Testing port 3001:"
-            if curl -f http://localhost:3001 >/dev/null 2>&1; then
-              echo "✅ Application responds on port 3001"
-              curl -I http://localhost:3001 | head -5
+            # Check if app is running on port 3002
+            echo "🔍 Testing port 3002:"
+            if curl -f http://localhost:3002 >/dev/null 2>&1; then
+              echo "✅ Application responds on port 3002"
+              curl -I http://localhost:3002 | head -5
             else
-              echo "❌ Application does NOT respond on port 3001"
+              echo "❌ Application does NOT respond on port 3002"
               echo "   Checking PM2 logs..."
               pm2 logs xcited-web --lines 30 --nostream || echo "   No logs available"
             fi
