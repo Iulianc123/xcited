@@ -419,6 +419,31 @@ jobs:
             echo "🔄 Managing PM2 process..."
             pm2 delete xcited-web 2>/dev/null || true
             
+            # CRITICAL: Kill any process using port 3001 (like wishhub does)
+            echo "🔍 Checking for processes using port 3001..."
+            PORT_3001_PID=$(ss -ltnp 2>/dev/null | grep ':3001' | grep -oP 'pid=\K[0-9]+' | head -1 || echo "")
+            if [ -n "$PORT_3001_PID" ]; then
+              echo "   ⚠️  Found process $PORT_3001_PID using port 3001"
+              echo "   Killing process $PORT_3001_PID..."
+              kill -9 "$PORT_3001_PID" 2>/dev/null || true
+              sleep 2
+              # Verify port is free
+              if ss -ltnp 2>/dev/null | grep -q ':3001'; then
+                echo "   ⚠️  Port 3001 still in use, trying harder..."
+                pkill -9 -f "next-server.*3001" 2>/dev/null || true
+                pkill -9 -f "server.js.*3001" 2>/dev/null || true
+                sleep 2
+              fi
+            fi
+            
+            # Verify port 3001 is free
+            if ss -ltnp 2>/dev/null | grep -q ':3001'; then
+              echo "   ⚠️  WARN: Port 3001 is still in use after cleanup"
+              ss -ltnp 2>/dev/null | grep ':3001' || true
+            else
+              echo "   ✅ Port 3001 is free"
+            fi
+            
             # Set PATH to prioritize system Node.js
             export PATH="/usr/bin:/usr/local/bin:/opt/nodejs/bin:$PATH"
             echo "   Using PATH: $PATH"
@@ -488,6 +513,27 @@ jobs:
             # CRITICAL: Delete old PM2 processes first (they may be using wrong Node.js)
             echo "🔄 Stopping and deleting old PM2 processes..."
             pm2 delete xcited-web 2>/dev/null || true
+            
+            # Kill any process using port 3001
+            echo "🔍 Checking for processes using port 3001..."
+            PORT_3001_PID=$(ss -ltnp 2>/dev/null | grep ':3001' | grep -oP 'pid=\K[0-9]+' | head -1 || echo "")
+            if [ -n "$PORT_3001_PID" ]; then
+              echo "   ⚠️  Found process $PORT_3001_PID using port 3001"
+              echo "   Killing process $PORT_3001_PID..."
+              kill -9 "$PORT_3001_PID" 2>/dev/null || true
+              pkill -9 -f "next-server.*3001" 2>/dev/null || true
+              pkill -9 -f "server.js.*3001" 2>/dev/null || true
+              sleep 2
+            fi
+            
+            # Verify port 3001 is free
+            if ss -ltnp 2>/dev/null | grep -q ':3001'; then
+              echo "   ⚠️  WARN: Port 3001 is still in use"
+              ss -ltnp 2>/dev/null | grep ':3001' || true
+            else
+              echo "   ✅ Port 3001 is free"
+            fi
+            
             pm2 kill 2>/dev/null || true
             sleep 2
             
