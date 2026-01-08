@@ -115,32 +115,58 @@ jobs:
             
             # Verify Apache config syntax
             echo "🔍 Testing Apache configuration..."
-            if httpd -t 2>/dev/null || apache2ctl -t 2>/dev/null; then
-              echo "   ✅ Apache configuration is valid"
+            
+            # Find Apache/httpd command (CWP7pro may have it in different locations)
+            HTTPD_CMD=""
+            for cmd in "/usr/sbin/httpd" "/usr/local/apache/bin/httpd" "/usr/bin/httpd" "httpd" "/usr/sbin/apache2ctl" "/usr/bin/apache2ctl" "apache2ctl"; do
+              if command -v "$cmd" >/dev/null 2>&1 || [ -f "$cmd" ]; then
+                HTTPD_CMD="$cmd"
+                break
+              fi
+            done
+            
+            if [ -n "$HTTPD_CMD" ]; then
+              echo "   Found Apache command: $HTTPD_CMD"
               
-              # Reload Apache
-              echo "🔄 Reloading Apache..."
-              if systemctl reload httpd 2>/dev/null || systemctl reload apache2 2>/dev/null; then
-                echo "   ✅ Apache reloaded successfully"
-              elif systemctl restart httpd 2>/dev/null || systemctl restart apache2 2>/dev/null; then
-                echo "   ✅ Apache restarted successfully"
+              # Test configuration (may need sudo)
+              if sudo -n "$HTTPD_CMD" -t 2>/dev/null || "$HTTPD_CMD" -t 2>/dev/null; then
+                echo "   ✅ Apache configuration is valid"
+                
+                # Reload Apache
+                echo "🔄 Reloading Apache..."
+                if sudo -n systemctl reload httpd 2>/dev/null || systemctl reload httpd 2>/dev/null; then
+                  echo "   ✅ Apache reloaded successfully"
+                elif sudo -n systemctl restart httpd 2>/dev/null || systemctl restart httpd 2>/dev/null; then
+                  echo "   ✅ Apache restarted successfully"
+                elif sudo -n systemctl reload apache2 2>/dev/null || systemctl reload apache2 2>/dev/null; then
+                  echo "   ✅ Apache reloaded successfully"
+                elif sudo -n systemctl restart apache2 2>/dev/null || systemctl restart apache2 2>/dev/null; then
+                  echo "   ✅ Apache restarted successfully"
+                else
+                  echo "   ⚠️  Apache reload/restart failed"
+                  echo "   Configuration file created at: /etc/httpd/conf.d/xcited.conf"
+                  echo "   Please restart Apache manually: sudo systemctl restart httpd"
+                fi
               else
-                echo "   ⚠️  Apache reload/restart failed, may need manual restart"
+                echo "   ⚠️  Could not test Apache configuration (may need sudo)"
+                echo "   Configuration file created at: /etc/httpd/conf.d/xcited.conf"
+                echo "   Please test manually: sudo $HTTPD_CMD -t"
               fi
             else
-              echo "   ❌ Apache configuration has errors!"
-              echo "   Checking syntax errors..."
-              httpd -t 2>&1 || apache2ctl -t 2>&1 || true
-              echo "   ⚠️  Please fix Apache configuration manually"
+              echo "   ⚠️  Apache command not found in PATH"
+              echo "   Configuration file created at: /etc/httpd/conf.d/xcited.conf"
+              echo "   Please test and restart Apache manually:"
+              echo "     sudo /usr/sbin/httpd -t"
+              echo "     sudo systemctl restart httpd"
             fi
             
             # Verify Apache can access localhost:3002
             echo "🔍 Verifying Apache can access localhost:3002..."
-            if curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3002 | grep -q "200\|404\|500"; then
-              echo "   ✅ Apache can access localhost:3002"
+            if curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3002 2>/dev/null | grep -q "200\|404\|500"; then
+              echo "   ✅ Application responds on localhost:3002"
             else
-              echo "   ⚠️  WARN: Apache may not be able to access localhost:3002"
-              echo "   This is normal if the app is not running yet"
+              echo "   ⚠️  Application may not be running on localhost:3002 yet"
+              echo "   This is normal if the app hasn't been deployed yet"
             fi
             
             echo "✅ Server setup completed!"

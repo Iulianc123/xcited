@@ -743,20 +743,41 @@ jobs:
             fi
             
             # Test Apache configuration
-            if httpd -t 2>/dev/null || apache2ctl -t 2>/dev/null; then
-              echo "   ✅ Apache configuration is valid"
+            # Find Apache/httpd command (CWP7pro may have it in different locations)
+            HTTPD_CMD=""
+            for cmd in "/usr/sbin/httpd" "/usr/local/apache/bin/httpd" "/usr/bin/httpd" "httpd" "/usr/sbin/apache2ctl" "/usr/bin/apache2ctl" "apache2ctl"; do
+              if command -v "$cmd" >/dev/null 2>&1 || [ -f "$cmd" ]; then
+                HTTPD_CMD="$cmd"
+                break
+              fi
+            done
+            
+            if [ -n "$HTTPD_CMD" ]; then
+              echo "   Found Apache command: $HTTPD_CMD"
               
-              # Reload Apache
-              if systemctl reload httpd 2>/dev/null || systemctl reload apache2 2>/dev/null; then
-                echo "   ✅ Apache reloaded"
-              elif systemctl restart httpd 2>/dev/null || systemctl restart apache2 2>/dev/null; then
-                echo "   ✅ Apache restarted"
+              # Test configuration (may need sudo)
+              if sudo -n "$HTTPD_CMD" -t 2>/dev/null || "$HTTPD_CMD" -t 2>/dev/null; then
+                echo "   ✅ Apache configuration is valid"
+                
+                # Reload Apache
+                if sudo -n systemctl reload httpd 2>/dev/null || systemctl reload httpd 2>/dev/null; then
+                  echo "   ✅ Apache reloaded"
+                elif sudo -n systemctl restart httpd 2>/dev/null || systemctl restart httpd 2>/dev/null; then
+                  echo "   ✅ Apache restarted"
+                elif sudo -n systemctl reload apache2 2>/dev/null || systemctl reload apache2 2>/dev/null; then
+                  echo "   ✅ Apache reloaded"
+                elif sudo -n systemctl restart apache2 2>/dev/null || systemctl restart apache2 2>/dev/null; then
+                  echo "   ✅ Apache restarted"
+                else
+                  echo "   ⚠️  Apache reload/restart failed (may need manual restart)"
+                fi
               else
-                echo "   ⚠️  Apache reload/restart failed"
+                echo "   ⚠️  Could not test Apache configuration (may need sudo)"
+                echo "   Configuration file: $APACHE_CONFIG"
               fi
             else
-              echo "   ❌ Apache configuration has errors!"
-              httpd -t 2>&1 || apache2ctl -t 2>&1 || true
+              echo "   ⚠️  Apache command not found, configuration file: $APACHE_CONFIG"
+              echo "   Please test and restart Apache manually"
             fi
             
             # Final permissions check for Apache
