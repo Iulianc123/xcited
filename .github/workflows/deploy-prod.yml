@@ -720,8 +720,20 @@ jobs:
             # Verify and reconfigure Apache reverse proxy
             echo "🌐 Verifying Apache reverse proxy configuration..."
             
-            # Check if Apache config exists
-            APACHE_CONFIG="/etc/httpd/conf.d/xcited.conf"
+            # Determine Apache config directory (CWP7pro vs standard)
+            APACHE_CONF_DIR=""
+            if [ -d "/usr/local/apache/conf/conf.d" ]; then
+              APACHE_CONF_DIR="/usr/local/apache/conf/conf.d"
+            elif [ -d "/usr/local/apache/conf.d" ]; then
+              APACHE_CONF_DIR="/usr/local/apache/conf.d"
+            elif [ -d "/etc/httpd/conf.d" ]; then
+              APACHE_CONF_DIR="/etc/httpd/conf.d"
+            else
+              APACHE_CONF_DIR="/etc/httpd/conf.d"
+            fi
+            
+            APACHE_CONFIG="${APACHE_CONF_DIR}/xcited.conf"
+            echo "   Using Apache config directory: $APACHE_CONF_DIR"
             if [ ! -f "$APACHE_CONFIG" ]; then
               echo "   ⚠️  Apache config not found at $APACHE_CONFIG"
               echo "   Creating Apache reverse proxy configuration..."
@@ -753,8 +765,14 @@ jobs:
               echo '    ProxyTimeout 300' >> "$APACHE_CONFIG"
               echo '    RequestHeader set X-Forwarded-Proto "http"' >> "$APACHE_CONFIG"
               echo '' >> "$APACHE_CONFIG"
-              echo '    ErrorLog /var/log/httpd/xcited_error.log' >> "$APACHE_CONFIG"
-              echo '    CustomLog /var/log/httpd/xcited_access.log combined' >> "$APACHE_CONFIG"
+              # CWP7pro uses /usr/local/apache/logs/ instead of /var/log/httpd/
+              if [ -d "/usr/local/apache/logs" ]; then
+                echo '    ErrorLog /usr/local/apache/logs/xcited_error.log' >> "$APACHE_CONFIG"
+                echo '    CustomLog /usr/local/apache/logs/xcited_access.log combined' >> "$APACHE_CONFIG"
+              else
+                echo '    ErrorLog /var/log/httpd/xcited_error.log' >> "$APACHE_CONFIG"
+                echo '    CustomLog /var/log/httpd/xcited_access.log combined' >> "$APACHE_CONFIG"
+              fi
               echo '    LogLevel warn' >> "$APACHE_CONFIG"
               echo '</VirtualHost>' >> "$APACHE_CONFIG"
               
@@ -798,8 +816,11 @@ jobs:
                   echo "   ✅ Apache reloaded"
                 elif sudo -n systemctl restart apache2 2>/dev/null || systemctl restart apache2 2>/dev/null; then
                   echo "   ✅ Apache restarted"
+                elif sudo -n "$HTTPD_CMD" -k graceful 2>/dev/null || "$HTTPD_CMD" -k graceful 2>/dev/null; then
+                  echo "   ✅ Apache gracefully reloaded"
                 else
                   echo "   ⚠️  Apache reload/restart failed (may need manual restart)"
+                  echo "   Try: $HTTPD_CMD -k graceful"
                 fi
               else
                 echo "   ⚠️  Could not test Apache configuration (may need sudo)"
@@ -857,11 +878,21 @@ jobs:
             
             # Check Apache error logs for clues
             echo "🔍 Checking Apache error logs for 'Forbidden' errors..."
-            if [ -f /var/log/httpd/xcited_error.log ]; then
-              echo "   Last 10 lines of Apache error log:"
-              tail -10 /var/log/httpd/xcited_error.log 2>/dev/null || echo "   Cannot read error log"
+            # CWP7pro uses /usr/local/apache/logs/ instead of /var/log/httpd/
+            APACHE_ERROR_LOG=""
+            if [ -f "/usr/local/apache/logs/xcited_error.log" ]; then
+              APACHE_ERROR_LOG="/usr/local/apache/logs/xcited_error.log"
+            elif [ -f "/var/log/httpd/xcited_error.log" ]; then
+              APACHE_ERROR_LOG="/var/log/httpd/xcited_error.log"
+            elif [ -f "/usr/local/apache/logs/error_log" ]; then
+              APACHE_ERROR_LOG="/usr/local/apache/logs/error_log"
+            fi
+            
+            if [ -n "$APACHE_ERROR_LOG" ] && [ -f "$APACHE_ERROR_LOG" ]; then
+              echo "   Last 10 lines of Apache error log ($APACHE_ERROR_LOG):"
+              tail -10 "$APACHE_ERROR_LOG" 2>/dev/null || echo "   Cannot read error log"
             else
-              echo "   Apache error log not found at /var/log/httpd/xcited_error.log"
+              echo "   Apache error log not found (checked multiple locations)"
             fi
             
             # Final PM2 status and logs

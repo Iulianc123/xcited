@@ -77,7 +77,26 @@ jobs:
             
             # Create new Apache config using echo (avoid YAML heredoc issues)
             # CRITICAL: ProxyPass must come BEFORE Directory directive to avoid Forbidden errors
-            echo '<VirtualHost *:80>' > /etc/httpd/conf.d/xcited.conf
+            # CWP7pro uses /usr/local/apache/conf/conf.d/ instead of /etc/httpd/conf.d/
+            
+            # Determine Apache config directory (CWP7pro vs standard)
+            APACHE_CONF_DIR=""
+            if [ -d "/usr/local/apache/conf/conf.d" ]; then
+              APACHE_CONF_DIR="/usr/local/apache/conf/conf.d"
+            elif [ -d "/usr/local/apache/conf.d" ]; then
+              APACHE_CONF_DIR="/usr/local/apache/conf.d"
+            elif [ -d "/etc/httpd/conf.d" ]; then
+              APACHE_CONF_DIR="/etc/httpd/conf.d"
+            else
+              APACHE_CONF_DIR="/etc/httpd/conf.d"
+              mkdir -p "$APACHE_CONF_DIR" 2>/dev/null || true
+            fi
+            
+            APACHE_CONFIG="${APACHE_CONF_DIR}/xcited.conf"
+            echo "   Using Apache config directory: $APACHE_CONF_DIR"
+            echo "   Config file: $APACHE_CONFIG"
+            
+            echo '<VirtualHost *:80>' > "$APACHE_CONFIG"
             echo '    ServerName xcited.ro' >> /etc/httpd/conf.d/xcited.conf
             echo '    ServerAlias www.xcited.ro' >> /etc/httpd/conf.d/xcited.conf
             echo '' >> /etc/httpd/conf.d/xcited.conf
@@ -112,13 +131,19 @@ jobs:
             echo '    # Error handling' >> /etc/httpd/conf.d/xcited.conf
             echo '    ProxyErrorOverride Off' >> /etc/httpd/conf.d/xcited.conf
             echo '' >> /etc/httpd/conf.d/xcited.conf
-            echo '    # Logging' >> /etc/httpd/conf.d/xcited.conf
-            echo '    ErrorLog /var/log/httpd/xcited_error.log' >> /etc/httpd/conf.d/xcited.conf
-            echo '    CustomLog /var/log/httpd/xcited_access.log combined' >> /etc/httpd/conf.d/xcited.conf
-            echo '    LogLevel warn' >> /etc/httpd/conf.d/xcited.conf
-            echo '</VirtualHost>' >> /etc/httpd/conf.d/xcited.conf
+            echo '    # Logging' >> "$APACHE_CONFIG"
+            # CWP7pro uses /usr/local/apache/logs/ instead of /var/log/httpd/
+            if [ -d "/usr/local/apache/logs" ]; then
+              echo '    ErrorLog /usr/local/apache/logs/xcited_error.log' >> "$APACHE_CONFIG"
+              echo '    CustomLog /usr/local/apache/logs/xcited_access.log combined' >> "$APACHE_CONFIG"
+            else
+              echo '    ErrorLog /var/log/httpd/xcited_error.log' >> "$APACHE_CONFIG"
+              echo '    CustomLog /var/log/httpd/xcited_access.log combined' >> "$APACHE_CONFIG"
+            fi
+            echo '    LogLevel warn' >> "$APACHE_CONFIG"
+            echo '</VirtualHost>' >> "$APACHE_CONFIG"
             
-            echo "   ✅ Apache config created at /etc/httpd/conf.d/xcited.conf"
+            echo "   ✅ Apache config created at $APACHE_CONFIG"
             
             # Verify Apache config syntax
             echo "🔍 Testing Apache configuration..."
@@ -150,9 +175,15 @@ jobs:
                 elif sudo -n systemctl restart apache2 2>/dev/null || systemctl restart apache2 2>/dev/null; then
                   echo "   ✅ Apache restarted successfully"
                 else
-                  echo "   ⚠️  Apache reload/restart failed"
-                  echo "   Configuration file created at: /etc/httpd/conf.d/xcited.conf"
-                  echo "   Please restart Apache manually: sudo systemctl restart httpd"
+                  echo "   ⚠️  Apache reload/restart failed, trying graceful reload..."
+                  # Try graceful reload directly
+                  if sudo -n "$HTTPD_CMD" -k graceful 2>/dev/null || "$HTTPD_CMD" -k graceful 2>/dev/null; then
+                    echo "   ✅ Apache gracefully reloaded"
+                  else
+                    echo "   ⚠️  Apache reload/restart failed"
+                    echo "   Configuration file created at: $APACHE_CONFIG"
+                    echo "   Please restart Apache manually: $HTTPD_CMD -k graceful"
+                  fi
                 fi
               else
                 echo "   ⚠️  Could not test Apache configuration (may need sudo)"
