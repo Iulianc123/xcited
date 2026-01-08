@@ -44,11 +44,30 @@ jobs:
           # Next.js standalone output (like 1dream)
           if [ -d ".next/standalone" ]; then
             echo "✅ Found standalone build"
+            echo "📁 Standalone structure:"
+            ls -la .next/standalone | head -10
+            
+            # Copy standalone build
             cp -R .next/standalone/* deploy-package/
             
-            # Static assets must be copied into the standalone folder structure
+            # CRITICAL: Static assets must be in .next/static relative to server.js
+            # In standalone build, server.js is in root, so .next should be in root too
             mkdir -p deploy-package/.next
             cp -R .next/static deploy-package/.next/static
+            
+            # Also copy .next/BUILD_ID if it exists (required by Next.js)
+            if [ -f ".next/BUILD_ID" ]; then
+              cp .next/BUILD_ID deploy-package/.next/BUILD_ID
+              echo "   ✅ Copied BUILD_ID"
+            fi
+            
+            # Copy .next/required-server-files.json if it exists
+            if [ -f ".next/required-server-files.json" ]; then
+              cp .next/required-server-files.json deploy-package/.next/required-server-files.json
+              echo "   ✅ Copied required-server-files.json"
+            fi
+            
+            echo "   ✅ Copied standalone build and static assets"
             
             # public/ is optional in Next.js projects
             if [ -d "public" ]; then
@@ -450,32 +469,83 @@ jobs:
             echo "   Node.js: $(which node) ($(node -v 2>/dev/null || echo 'unknown'))"
             
             # Find server.js in standalone build structure (exclude node_modules)
+            echo "🔍 Searching for server.js and .next directory..."
+            echo "📁 Current directory structure:"
+            ls -la | head -20
+            echo ""
+            
             SERVER_JS=""
             if [ -f "server.js" ]; then
               SERVER_JS="server.js"
+              echo "   ✅ Found server.js in root"
             elif [ -f ".next/standalone/server.js" ]; then
               SERVER_JS=".next/standalone/server.js"
+              echo "   ✅ Found server.js in .next/standalone/"
             elif [ -f "standalone/server.js" ]; then
               SERVER_JS="standalone/server.js"
+              echo "   ✅ Found server.js in standalone/"
             else
-              echo "🔍 Searching for server.js (excluding node_modules)..."
+              echo "   🔍 Searching for server.js (excluding node_modules)..."
               SERVER_JS=$(find . -name "server.js" -type f -not -path "*/node_modules/*" | head -1)
+              if [ -n "$SERVER_JS" ]; then
+                echo "   ✅ Found server.js at: $SERVER_JS"
+              fi
             fi
             
             if [ -z "$SERVER_JS" ] || [ ! -f "$SERVER_JS" ]; then
-              echo "⚠️  server.js not found"
+              echo "❌ ERROR: server.js not found"
               echo "📁 Current directory structure:"
               ls -la
               echo ""
               echo "🔍 Searching for server.js (excluding node_modules)..."
               find . -name "server.js" -type f -not -path "*/node_modules/*" || echo "No server.js found"
               echo ""
-              echo "⚠️  Cannot start PM2 without server.js"
-              echo "💡 Verifică dacă build-ul standalone a fost creat corect"
+              echo "❌ Cannot start PM2 without server.js"
               exit 1
             fi
             
             echo "✅ Found server.js at: $SERVER_JS"
+            
+            # CRITICAL: Verify .next directory exists relative to server.js
+            SERVER_DIR=$(dirname "$SERVER_JS")
+            if [ "$SERVER_DIR" = "." ]; then
+              SERVER_DIR=$(pwd)
+            else
+              SERVER_DIR=$(cd "$SERVER_DIR" && pwd)
+            fi
+            
+            echo "   Server.js directory: $SERVER_DIR"
+            
+            # Check for .next in various locations
+            NEXT_DIR=""
+            if [ -d "$SERVER_DIR/.next" ]; then
+              NEXT_DIR="$SERVER_DIR/.next"
+              echo "   ✅ Found .next in server.js directory"
+            elif [ -d ".next" ]; then
+              NEXT_DIR=".next"
+              echo "   ✅ Found .next in current directory"
+            elif [ -d "$(pwd)/.next" ]; then
+              NEXT_DIR="$(pwd)/.next"
+              echo "   ✅ Found .next in working directory"
+            else
+              echo "   ⚠️  WARN: .next directory not found near server.js"
+              echo "   Searching for .next directory..."
+              find . -type d -name ".next" -not -path "*/node_modules/*" | head -5
+            fi
+            
+            if [ -z "$NEXT_DIR" ] || [ ! -d "$NEXT_DIR" ]; then
+              echo "❌ ERROR: .next directory not found!"
+              echo "   This will cause: 'Could not find a production build in the ./.next directory'"
+              echo "   Current directory: $(pwd)"
+              echo "   Server.js: $SERVER_JS"
+              echo "   Listing all .next directories:"
+              find . -type d -name ".next" -not -path "*/node_modules/*" || echo "   No .next directories found"
+              exit 1
+            fi
+            
+            echo "   ✅ .next directory found: $NEXT_DIR"
+            echo "   .next contents:"
+            ls -la "$NEXT_DIR" | head -10 || echo "   Cannot list .next directory"
             
             # CRITICAL: PM2 must use system Node.js 20, not nvm Node.js 14
             echo "🔍 Verifying PM2 uses correct Node.js..."
