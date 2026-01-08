@@ -134,5 +134,5 @@ După ce ai făcut fix-ul, site-ul ar trebui să funcționeze la `https://xcited
 Dacă problema persistă, verifică:
 - Apache error logs: `/var/log/httpd/xcited_error.log`
 - PM2 status: `pm2 list`
-- Dacă aplicația rulează pe portul 3001: `curl http://localhost:3001`
+- Dacă aplicația rulează pe portul 3002: `curl http://localhost:3002`
 

@@ -48,7 +48,7 @@ module.exports = {
     exec_mode: 'cluster',
     env: {
       NODE_ENV: 'production',
-      PORT: 3001
+      PORT: 3002
     },
     error_file: '/var/log/pm2/xcited-web-error.log',
     out_file: '/var/log/pm2/xcited-web-out.log',

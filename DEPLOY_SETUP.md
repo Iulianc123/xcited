@@ -92,8 +92,8 @@ Creează virtual host în Apache:
     ServerAlias www.xcited.org
     
     ProxyPreserveHost On
-    ProxyPass / http://localhost:3001/
-    ProxyPassReverse / http://localhost:3001/
+    ProxyPass / http://localhost:3002/
+    ProxyPassReverse / http://localhost:3002/
     
     ErrorLog /var/log/httpd/xcited_error.log
     CustomLog /var/log/httpd/xcited_access.log combined
@@ -135,7 +135,7 @@ După deploy:
 
 ### Aplicația nu pornește
 - Verifică log-uri: `pm2 logs xcited-web`
-- Verifică port: `netstat -tlnp | grep 3001`
+- Verifică port: `netstat -tlnp | grep 3002`
 - Verifică PM2: `pm2 list`
 
 ## Workflow-uri Disponibile

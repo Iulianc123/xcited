@@ -37,7 +37,7 @@
 2. **Site-ul xcited.ro**
    - Verifică: https://xcited.ro
    - Dacă arată WordPress sau eroare: Apache reverse proxy nu este configurat
-   - Dacă aplicația nu pornește: PM2 nu rulează sau portul 3001 nu este accesibil
+   - Dacă aplicația nu pornește: PM2 nu rulează sau portul 3002 nu este accesibil
 
 ## 🔧 Pași pentru rezolvare
 
@@ -60,15 +60,15 @@ chown -R xcited:xcited /home/xcited/public_html
 ```
 
 ### 3. Configurează Apache reverse proxy
-Pentru domeniul `xcited.ro`, configurează reverse proxy către `localhost:3001` (port diferit de wishhub care folosește 3000):
+Pentru domeniul `xcited.ro`, configurează reverse proxy către `localhost:3002` (port diferit de wishhub care folosește 3000):
 ```apache
 <VirtualHost *:80>
     ServerName xcited.ro
     ServerAlias www.xcited.ro
     
     ProxyPreserveHost On
-    ProxyPass / http://localhost:3001/
-    ProxyPassReverse / http://localhost:3001/
+    ProxyPass / http://localhost:3002/
+    ProxyPassReverse / http://localhost:3002/
 </VirtualHost>
 ```
 
