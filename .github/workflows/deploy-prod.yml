@@ -702,33 +702,31 @@ jobs:
               echo "   ⚠️  Apache config not found at $APACHE_CONFIG"
               echo "   Creating Apache reverse proxy configuration..."
               
-              # Create Apache config
-              cat > "$APACHE_CONFIG" << 'APACHE_EOF'
-<VirtualHost *:80>
-    ServerName xcited.ro
-    ServerAlias www.xcited.ro
-    
-    DocumentRoot /home/xcited/public_html
-    
-    <Directory /home/xcited/public_html>
-        Options -Indexes +FollowSymLinks
-        AllowOverride None
-        Require all granted
-    </Directory>
-    
-    ProxyPreserveHost On
-    ProxyPass / http://127.0.0.1:3002/
-    ProxyPassReverse / http://127.0.0.1:3002/
-    
-    ProxyRequests Off
-    ProxyTimeout 300
-    RequestHeader set X-Forwarded-Proto "http"
-    
-    ErrorLog /var/log/httpd/xcited_error.log
-    CustomLog /var/log/httpd/xcited_access.log combined
-    LogLevel warn
-</VirtualHost>
-APACHE_EOF
+              # Create Apache config using echo (avoid YAML heredoc issues)
+              echo '<VirtualHost *:80>' > "$APACHE_CONFIG"
+              echo '    ServerName xcited.ro' >> "$APACHE_CONFIG"
+              echo '    ServerAlias www.xcited.ro' >> "$APACHE_CONFIG"
+              echo '' >> "$APACHE_CONFIG"
+              echo '    DocumentRoot /home/xcited/public_html' >> "$APACHE_CONFIG"
+              echo '' >> "$APACHE_CONFIG"
+              echo '    <Directory /home/xcited/public_html>' >> "$APACHE_CONFIG"
+              echo '        Options -Indexes +FollowSymLinks' >> "$APACHE_CONFIG"
+              echo '        AllowOverride None' >> "$APACHE_CONFIG"
+              echo '        Require all granted' >> "$APACHE_CONFIG"
+              echo '    </Directory>' >> "$APACHE_CONFIG"
+              echo '' >> "$APACHE_CONFIG"
+              echo '    ProxyPreserveHost On' >> "$APACHE_CONFIG"
+              echo '    ProxyPass / http://127.0.0.1:3002/' >> "$APACHE_CONFIG"
+              echo '    ProxyPassReverse / http://127.0.0.1:3002/' >> "$APACHE_CONFIG"
+              echo '' >> "$APACHE_CONFIG"
+              echo '    ProxyRequests Off' >> "$APACHE_CONFIG"
+              echo '    ProxyTimeout 300' >> "$APACHE_CONFIG"
+              echo '    RequestHeader set X-Forwarded-Proto "http"' >> "$APACHE_CONFIG"
+              echo '' >> "$APACHE_CONFIG"
+              echo '    ErrorLog /var/log/httpd/xcited_error.log' >> "$APACHE_CONFIG"
+              echo '    CustomLog /var/log/httpd/xcited_access.log combined' >> "$APACHE_CONFIG"
+              echo '    LogLevel warn' >> "$APACHE_CONFIG"
+              echo '</VirtualHost>' >> "$APACHE_CONFIG"
               
               echo "   ✅ Apache config created"
             else
