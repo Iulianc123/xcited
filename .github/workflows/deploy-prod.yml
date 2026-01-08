@@ -50,24 +50,43 @@ jobs:
             # Copy standalone build
             cp -R .next/standalone/* deploy-package/
             
-            # CRITICAL: Static assets must be in .next/static relative to server.js
-            # In standalone build, server.js is in root, so .next should be in root too
+            # CRITICAL: Copy ALL required .next files (not just static)
+            # Next.js standalone needs: static, BUILD_ID, routes-manifest.json, and other manifest files
             mkdir -p deploy-package/.next
-            cp -R .next/static deploy-package/.next/static
             
-            # Also copy .next/BUILD_ID if it exists (required by Next.js)
+            # Copy static assets (required)
+            if [ -d ".next/static" ]; then
+              cp -R .next/static deploy-package/.next/static
+              echo "   ✅ Copied .next/static"
+            fi
+            
+            # Copy BUILD_ID (required)
             if [ -f ".next/BUILD_ID" ]; then
               cp .next/BUILD_ID deploy-package/.next/BUILD_ID
               echo "   ✅ Copied BUILD_ID"
             fi
             
-            # Copy .next/required-server-files.json if it exists
-            if [ -f ".next/required-server-files.json" ]; then
-              cp .next/required-server-files.json deploy-package/.next/required-server-files.json
-              echo "   ✅ Copied required-server-files.json"
+            # Copy routes-manifest.json (required - this is what's missing!)
+            if [ -f ".next/routes-manifest.json" ]; then
+              cp .next/routes-manifest.json deploy-package/.next/routes-manifest.json
+              echo "   ✅ Copied routes-manifest.json"
             fi
             
-            echo "   ✅ Copied standalone build and static assets"
+            # Copy other manifest files that Next.js might need
+            for file in "required-server-files.json" "prerender-manifest.json" "images-manifest.json" "font-manifest.json"; do
+              if [ -f ".next/$file" ]; then
+                cp ".next/$file" "deploy-package/.next/$file"
+                echo "   ✅ Copied $file"
+              fi
+            done
+            
+            # Copy server directory if it exists (contains middleware, etc.)
+            if [ -d ".next/server" ]; then
+              cp -R .next/server deploy-package/.next/server
+              echo "   ✅ Copied .next/server"
+            fi
+            
+            echo "   ✅ Copied standalone build and all required .next files"
             
             # public/ is optional in Next.js projects
             if [ -d "public" ]; then
