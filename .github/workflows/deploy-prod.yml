@@ -355,24 +355,24 @@ jobs:
               fi
             fi
             
-            # PM2 management
-            echo "🔄 Managing PM2 process..."
-            pm2 delete xcited-web 2>/dev/null || true
+            # CRITICAL: Ensure PM2 uses Node.js 20
+            echo "🔍 Checking PM2 Node.js version..."
+            PM2_NODE=$(pm2 describe pm2 2>/dev/null | grep "interpreter" | head -1 | awk '{print $2}' || echo "")
+            if [ -z "$PM2_NODE" ]; then
+              PM2_NODE=$(which node 2>/dev/null || echo "")
+            fi
             
-            # CRITICAL: Verify Node.js version before starting PM2
-            echo "🔍 Final Node.js verification before PM2 start..."
-            ACTUAL_NODE=$(which node 2>/dev/null || echo "")
-            if [ -n "$ACTUAL_NODE" ]; then
-              ACTUAL_VERSION=$($ACTUAL_NODE -v 2>/dev/null || echo "unknown")
-              ACTUAL_MAJOR=$(echo "$ACTUAL_VERSION" | cut -d'v' -f2 | cut -d'.' -f1)
-              echo "   Current 'node' command points to: $ACTUAL_NODE"
-              echo "   Version: $ACTUAL_VERSION (major: $ACTUAL_MAJOR)"
+            echo "   PM2 is using Node.js: $PM2_NODE"
+            if [ -n "$PM2_NODE" ]; then
+              PM2_NODE_VER=$($PM2_NODE -v 2>/dev/null || echo "unknown")
+              PM2_NODE_MAJOR=$(echo "$PM2_NODE_VER" | cut -d'v' -f2 | cut -d'.' -f1)
+              echo "   PM2 Node.js version: $PM2_NODE_VER (major: $PM2_NODE_MAJOR)"
               
-              if [ "$ACTUAL_MAJOR" -lt 18 ] || echo "$ACTUAL_NODE" | grep -q "nvm"; then
-                echo "⚠️  WARN: 'node' still points to old version or nvm"
-                echo "   Forcing use of system Node.js 20..."
+              if [ "$PM2_NODE_MAJOR" -lt 18 ] || echo "$PM2_NODE" | grep -q "nvm"; then
+                echo "⚠️  CRITICAL: PM2 is using Node.js v14 from nvm"
+                echo "   Reinstalling PM2 with system Node.js 20..."
                 
-                # Find system Node.js 20
+                # Find or install system Node.js 20
                 SYSTEM_NODE=""
                 for path in /usr/bin/node /usr/local/bin/node /opt/nodejs/bin/node; do
                   if [ -f "$path" ]; then
@@ -395,13 +395,34 @@ jobs:
                   SYSTEM_NODE="/usr/bin/node"
                 fi
                 
-                # Export PATH to prioritize system Node.js
+                # Reinstall PM2 with system Node.js 20
+                echo "   Reinstalling PM2 with $SYSTEM_NODE..."
                 export PATH="/usr/bin:/usr/local/bin:/opt/nodejs/bin:$PATH"
-                echo "   Updated PATH to prioritize system Node.js"
-                echo "   New 'node' command: $(which node)"
-                echo "   New version: $(node -v 2>/dev/null || echo 'unknown')"
+                $SYSTEM_NODE -v
+                npm uninstall -g pm2 2>/dev/null || true
+                $SYSTEM_NODE $(which npm 2>/dev/null || echo "/usr/bin/npm") install -g pm2 || {
+                  echo "   ⚠️  PM2 reinstall failed, trying alternative..."
+                  /usr/bin/npm install -g pm2 || echo "   ⚠️  Alternative PM2 install also failed"
+                }
+                
+                # Verify PM2 now uses correct Node.js
+                NEW_PM2_NODE=$(which pm2 2>/dev/null || echo "")
+                if [ -n "$NEW_PM2_NODE" ]; then
+                  echo "   ✅ PM2 reinstalled at: $NEW_PM2_NODE"
+                fi
+              else
+                echo "   ✅ PM2 is using correct Node.js version"
               fi
             fi
+            
+            # PM2 management
+            echo "🔄 Managing PM2 process..."
+            pm2 delete xcited-web 2>/dev/null || true
+            
+            # Set PATH to prioritize system Node.js
+            export PATH="/usr/bin:/usr/local/bin:/opt/nodejs/bin:$PATH"
+            echo "   Using PATH: $PATH"
+            echo "   Node.js: $(which node) ($(node -v 2>/dev/null || echo 'unknown'))"
             
             # Find server.js in standalone build structure (exclude node_modules)
             SERVER_JS=""
