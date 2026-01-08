@@ -452,27 +452,48 @@ jobs:
             
             echo "✅ Found server.js at: $SERVER_JS"
             
-            # Use PM2 directly like wishhub does (simpler and more reliable)
-            # Wishhub doesn't use ecosystem.config.js, it uses pm2 start directly
-            echo "📋 Starting PM2 directly (like wishhub)..."
+            # CRITICAL: PM2 must use system Node.js 20, not nvm Node.js 14
+            echo "🔍 Verifying PM2 uses correct Node.js..."
+            PM2_NODE_PATH=$(which pm2 2>/dev/null || echo "")
+            if [ -n "$PM2_NODE_PATH" ]; then
+              echo "   PM2 path: $PM2_NODE_PATH"
+              # Check what Node.js PM2 uses
+              PM2_NODE=$(head -1 "$PM2_NODE_PATH" 2>/dev/null | grep -oP 'node.*' || echo "")
+              echo "   PM2 shebang: $PM2_NODE"
+            fi
             
-            # Set PATH to prioritize system Node.js
+            # Set PATH to prioritize system Node.js (BEFORE any PM2 commands)
             export PATH="/usr/bin:/usr/local/bin:/opt/nodejs/bin:$PATH"
             export NODE_ENV="production"
             export PORT="3001"
             
-            echo "   Using Node.js: $(which node) ($(node -v 2>/dev/null || echo 'unknown'))"
+            # Verify we're using system Node.js
+            SYSTEM_NODE=$(which node 2>/dev/null || echo "")
+            SYSTEM_NODE_VER=$(node -v 2>/dev/null || echo "unknown")
+            SYSTEM_NODE_MAJOR=$(echo "$SYSTEM_NODE_VER" | cut -d'v' -f2 | cut -d'.' -f1)
+            
+            echo "   Current Node.js: $SYSTEM_NODE ($SYSTEM_NODE_VER, major: $SYSTEM_NODE_MAJOR)"
+            
+            if [ "$SYSTEM_NODE_MAJOR" -lt 18 ] || echo "$SYSTEM_NODE" | grep -q "nvm"; then
+              echo "❌ ERROR: Still using old Node.js or nvm"
+              echo "   Node.js path: $SYSTEM_NODE"
+              echo "   This will cause the same error"
+              exit 1
+            fi
+            
+            echo "✅ Using system Node.js $SYSTEM_NODE_VER"
             echo "   Script: $SERVER_JS"
             echo "   Working directory: $(pwd)"
             
+            # CRITICAL: Delete old PM2 processes first (they may be using wrong Node.js)
+            echo "🔄 Stopping and deleting old PM2 processes..."
+            pm2 delete xcited-web 2>/dev/null || true
+            pm2 kill 2>/dev/null || true
+            sleep 2
+            
             # Start PM2 directly like wishhub (no ecosystem.config.js needed)
-            if pm2 describe xcited-web >/dev/null 2>&1; then
-              echo "   Restarting existing process..."
-              pm2 restart xcited-web --update-env
-            else
-              echo "   Starting new process..."
-              pm2 start "$SERVER_JS" --name xcited-web
-            fi
+            echo "📋 Starting PM2 with system Node.js..."
+            pm2 start "$SERVER_JS" --name xcited-web --update-env
             
             pm2 save
             echo "✅ Application started with PM2"
