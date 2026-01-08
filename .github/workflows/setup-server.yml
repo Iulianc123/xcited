@@ -76,11 +76,23 @@ jobs:
             fi
             
             # Create new Apache config using echo (avoid YAML heredoc issues)
+            # CRITICAL: ProxyPass must come BEFORE Directory directive to avoid Forbidden errors
             echo '<VirtualHost *:80>' > /etc/httpd/conf.d/xcited.conf
             echo '    ServerName xcited.ro' >> /etc/httpd/conf.d/xcited.conf
             echo '    ServerAlias www.xcited.ro' >> /etc/httpd/conf.d/xcited.conf
             echo '' >> /etc/httpd/conf.d/xcited.conf
-            echo '    # Disable DocumentRoot serving (we use reverse proxy)' >> /etc/httpd/conf.d/xcited.conf
+            echo '    # Reverse Proxy Configuration (MUST be first to avoid Forbidden)' >> /etc/httpd/conf.d/xcited.conf
+            echo '    ProxyPreserveHost On' >> /etc/httpd/conf.d/xcited.conf
+            echo '    ProxyPass / http://127.0.0.1:3002/' >> /etc/httpd/conf.d/xcited.conf
+            echo '    ProxyPassReverse / http://127.0.0.1:3002/' >> /etc/httpd/conf.d/xcited.conf
+            echo '    ProxyRequests Off' >> /etc/httpd/conf.d/xcited.conf
+            echo '    ProxyTimeout 300' >> /etc/httpd/conf.d/xcited.conf
+            echo '' >> /etc/httpd/conf.d/xcited.conf
+            echo '    # Headers for Next.js' >> /etc/httpd/conf.d/xcited.conf
+            echo '    RequestHeader set X-Forwarded-Proto "http"' >> /etc/httpd/conf.d/xcited.conf
+            echo '    RequestHeader set X-Forwarded-For "%{REMOTE_ADDR}e"' >> /etc/httpd/conf.d/xcited.conf
+            echo '' >> /etc/httpd/conf.d/xcited.conf
+            echo '    # DocumentRoot (not used, but required for Apache)' >> /etc/httpd/conf.d/xcited.conf
             echo '    DocumentRoot /home/xcited/public_html' >> /etc/httpd/conf.d/xcited.conf
             echo '' >> /etc/httpd/conf.d/xcited.conf
             echo '    <Directory /home/xcited/public_html>' >> /etc/httpd/conf.d/xcited.conf
@@ -88,11 +100,6 @@ jobs:
             echo '        AllowOverride None' >> /etc/httpd/conf.d/xcited.conf
             echo '        Require all granted' >> /etc/httpd/conf.d/xcited.conf
             echo '    </Directory>' >> /etc/httpd/conf.d/xcited.conf
-            echo '' >> /etc/httpd/conf.d/xcited.conf
-            echo '    # Reverse Proxy Configuration' >> /etc/httpd/conf.d/xcited.conf
-            echo '    ProxyPreserveHost On' >> /etc/httpd/conf.d/xcited.conf
-            echo '    ProxyPass / http://127.0.0.1:3002/' >> /etc/httpd/conf.d/xcited.conf
-            echo '    ProxyPassReverse / http://127.0.0.1:3002/' >> /etc/httpd/conf.d/xcited.conf
             echo '' >> /etc/httpd/conf.d/xcited.conf
             echo '    # Proxy settings' >> /etc/httpd/conf.d/xcited.conf
             echo '    ProxyRequests Off' >> /etc/httpd/conf.d/xcited.conf
