@@ -359,6 +359,50 @@ jobs:
             echo "🔄 Managing PM2 process..."
             pm2 delete xcited-web 2>/dev/null || true
             
+            # CRITICAL: Verify Node.js version before starting PM2
+            echo "🔍 Final Node.js verification before PM2 start..."
+            ACTUAL_NODE=$(which node 2>/dev/null || echo "")
+            if [ -n "$ACTUAL_NODE" ]; then
+              ACTUAL_VERSION=$($ACTUAL_NODE -v 2>/dev/null || echo "unknown")
+              ACTUAL_MAJOR=$(echo "$ACTUAL_VERSION" | cut -d'v' -f2 | cut -d'.' -f1)
+              echo "   Current 'node' command points to: $ACTUAL_NODE"
+              echo "   Version: $ACTUAL_VERSION (major: $ACTUAL_MAJOR)"
+              
+              if [ "$ACTUAL_MAJOR" -lt 18 ] || echo "$ACTUAL_NODE" | grep -q "nvm"; then
+                echo "⚠️  WARN: 'node' still points to old version or nvm"
+                echo "   Forcing use of system Node.js 20..."
+                
+                # Find system Node.js 20
+                SYSTEM_NODE=""
+                for path in /usr/bin/node /usr/local/bin/node /opt/nodejs/bin/node; do
+                  if [ -f "$path" ]; then
+                    VER=$($path -v 2>/dev/null || echo "")
+                    if [ -n "$VER" ]; then
+                      MAJOR=$(echo "$VER" | cut -d'v' -f2 | cut -d'.' -f1)
+                      if [ "$MAJOR" -ge 18 ]; then
+                        SYSTEM_NODE="$path"
+                        echo "   ✅ Found system Node.js $VER at: $SYSTEM_NODE"
+                        break
+                      fi
+                    fi
+                  fi
+                done
+                
+                if [ -z "$SYSTEM_NODE" ]; then
+                  echo "   Installing Node.js 20 system-wide..."
+                  curl -fsSL https://rpm.nodesource.com/setup_20.x | bash - || echo "⚠️  Node.js setup failed"
+                  yum install -y nodejs || echo "⚠️  Node.js install failed"
+                  SYSTEM_NODE="/usr/bin/node"
+                fi
+                
+                # Export PATH to prioritize system Node.js
+                export PATH="/usr/bin:/usr/local/bin:/opt/nodejs/bin:$PATH"
+                echo "   Updated PATH to prioritize system Node.js"
+                echo "   New 'node' command: $(which node)"
+                echo "   New version: $(node -v 2>/dev/null || echo 'unknown')"
+              fi
+            fi
+            
             # Find server.js in standalone build structure (exclude node_modules)
             SERVER_JS=""
             if [ -f "server.js" ]; then
@@ -432,7 +476,26 @@ jobs:
               fi
               
               echo "📋 Starting PM2 with ecosystem.config.js..."
-              echo "   Using Node.js: $(node -v 2>/dev/null || echo 'unknown')"
+              
+              # CRITICAL: Verify interpreter in ecosystem.config.js
+              INTERPRETER_IN_CONFIG=$(grep "interpreter:" ecosystem.config.js | head -1 | sed "s/.*interpreter: *['\"]\([^'\"]*\)['\"].*/\1/" || echo "")
+              if [ -n "$INTERPRETER_IN_CONFIG" ]; then
+                echo "   Interpreter in config: $INTERPRETER_IN_CONFIG"
+                if [ -f "$INTERPRETER_IN_CONFIG" ]; then
+                  INTERP_VERSION=$($INTERPRETER_IN_CONFIG -v 2>/dev/null || echo "unknown")
+                  echo "   Interpreter version: $INTERP_VERSION"
+                else
+                  echo "   ⚠️  WARN: Interpreter path not found: $INTERPRETER_IN_CONFIG"
+                fi
+              else
+                echo "   ⚠️  WARN: No interpreter found in ecosystem.config.js"
+              fi
+              
+              echo "   Current 'node' command: $(which node 2>/dev/null || echo 'not found')"
+              echo "   Current Node.js version: $(node -v 2>/dev/null || echo 'unknown')"
+              
+              # Start PM2 with explicit PATH to avoid nvm
+              export PATH="/usr/bin:/usr/local/bin:/opt/nodejs/bin:$PATH"
               pm2 start ecosystem.config.js
             else
               # Create ecosystem.config.js if it doesn't exist
@@ -477,7 +540,20 @@ jobs:
               echo "    max_memory_restart: '1G'" >> ecosystem.config.js
               echo '  }]' >> ecosystem.config.js
               echo '}' >> ecosystem.config.js
-              echo "   Using Node.js: $(node -v 2>/dev/null || echo 'unknown')"
+              
+              # Verify interpreter before starting
+              echo "   Verifying interpreter: $NODE_PATH"
+              if [ -f "$NODE_PATH" ]; then
+                VER=$($NODE_PATH -v 2>/dev/null || echo "unknown")
+                echo "   ✅ Interpreter exists, version: $VER"
+              else
+                echo "   ❌ ERROR: Interpreter not found: $NODE_PATH"
+                exit 1
+              fi
+              
+              # Start PM2 with explicit PATH to avoid nvm
+              export PATH="/usr/bin:/usr/local/bin:/opt/nodejs/bin:$PATH"
+              echo "   Starting PM2 with PATH: $PATH"
               pm2 start ecosystem.config.js
             fi
             
