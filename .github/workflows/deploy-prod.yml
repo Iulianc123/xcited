@@ -278,15 +278,39 @@ jobs:
             fi
             
             # Set correct permissions for directories and files (like 1dream)
-            echo "🔧 Setting permissions..."
+            # CRITICAL: Apache needs 755 for directories and 644 for files
+            echo "🔧 Setting permissions for Apache access..."
             if sudo -n true 2>/dev/null; then
+              echo "   Using sudo to set permissions..."
+              sudo -n chown -R "${OWNER_USER}:${OWNER_GROUP}" "${TARGET}" || true
               sudo -n find "${TARGET}" -type d -exec chmod 755 {} \; || true
               sudo -n find "${TARGET}" -type f -exec chmod 644 {} \; || true
               sudo -n chmod -R u+rwX "${TARGET}" || true
+              # Ensure server.js is executable
+              if [ -f "${TARGET}/deploy-package/server.js" ]; then
+                sudo -n chmod +x "${TARGET}/deploy-package/server.js" || true
+              fi
             else
+              echo "   Setting permissions without sudo..."
+              chown -R "${OWNER_USER}:${OWNER_GROUP}" "${TARGET}" 2>/dev/null || true
               find "${TARGET}" -type d -exec chmod 755 {} \; || true
               find "${TARGET}" -type f -exec chmod 644 {} \; || true
               chmod -R u+rwX "${TARGET}" || true
+              # Ensure server.js is executable
+              if [ -f "${TARGET}/deploy-package/server.js" ]; then
+                chmod +x "${TARGET}/deploy-package/server.js" || true
+              fi
+            fi
+            
+            # Verify permissions are correct
+            echo "🔍 Verifying permissions..."
+            if [ -d "${TARGET}/deploy-package" ]; then
+              DIR_PERMS=$(stat -c '%a' "${TARGET}/deploy-package" 2>/dev/null || echo "unknown")
+              echo "   deploy-package directory permissions: $DIR_PERMS (should be 755)"
+              if [ "$DIR_PERMS" != "755" ] && [ "$DIR_PERMS" != "unknown" ]; then
+                echo "   ⚠️  WARN: Directory permissions are not 755, fixing..."
+                chmod 755 "${TARGET}/deploy-package" || sudo -n chmod 755 "${TARGET}/deploy-package" || true
+              fi
             fi
             
             # Final verification
@@ -806,8 +830,32 @@ jobs:
               echo "   SELinux status: ${SELINUX_STATUS}"
               if [ "${SELINUX_STATUS}" != "Disabled" ]; then
                 echo "   ⚠️  WARN: SELinux is enabled - fixing context..."
-                sudo chcon -R -t httpd_sys_content_t "${TARGET}" 2>/dev/null || echo "   ⚠️  SELinux context fix failed"
+                sudo -n chcon -R -t httpd_sys_content_t "${TARGET}" 2>/dev/null || sudo chcon -R -t httpd_sys_content_t "${TARGET}" 2>/dev/null || echo "   ⚠️  SELinux context fix failed"
               fi
+            fi
+            
+            # CRITICAL: Verify Apache can access the application on port 3002
+            echo "🔍 Verifying Apache can access application..."
+            if curl -s -f http://127.0.0.1:3002 >/dev/null 2>&1; then
+              echo "   ✅ Application is accessible on localhost:3002"
+              HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3002 2>/dev/null || echo "000")
+              echo "   HTTP response code: $HTTP_CODE"
+            else
+              echo "   ❌ ERROR: Application is NOT accessible on localhost:3002"
+              echo "   This will cause 'Forbidden' errors in Apache"
+              echo "   Checking if port 3002 is listening..."
+              ss -ltnp 2>/dev/null | grep ':3002' || echo "   Port 3002 is not listening!"
+              echo "   Checking PM2 status..."
+              pm2 list | grep xcited-web || echo "   PM2 process not found!"
+            fi
+            
+            # Check Apache error logs for clues
+            echo "🔍 Checking Apache error logs for 'Forbidden' errors..."
+            if [ -f /var/log/httpd/xcited_error.log ]; then
+              echo "   Last 10 lines of Apache error log:"
+              tail -10 /var/log/httpd/xcited_error.log 2>/dev/null || echo "   Cannot read error log"
+            else
+              echo "   Apache error log not found at /var/log/httpd/xcited_error.log"
             fi
             
             # Final PM2 status and logs
