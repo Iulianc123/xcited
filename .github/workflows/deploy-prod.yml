@@ -51,7 +51,7 @@ jobs:
             cp -R .next/standalone/* deploy-package/
             
             # CRITICAL: Copy ALL required .next files (not just static)
-            # Next.js standalone needs: static, BUILD_ID, routes-manifest.json, and other manifest files
+            # Next.js standalone needs: static, BUILD_ID, and ALL manifest files
             mkdir -p deploy-package/.next
             
             # Copy static assets (required)
@@ -66,18 +66,12 @@ jobs:
               echo "   ✅ Copied BUILD_ID"
             fi
             
-            # Copy routes-manifest.json (required - this is what's missing!)
-            if [ -f ".next/routes-manifest.json" ]; then
-              cp .next/routes-manifest.json deploy-package/.next/routes-manifest.json
-              echo "   ✅ Copied routes-manifest.json"
-            fi
-            
-            # Copy other manifest files that Next.js might need
-            for file in "required-server-files.json" "prerender-manifest.json" "images-manifest.json" "font-manifest.json"; do
-              if [ -f ".next/$file" ]; then
-                cp ".next/$file" "deploy-package/.next/$file"
-                echo "   ✅ Copied $file"
-              fi
+            # Copy ALL .json manifest files from .next/ (Next.js needs all of them)
+            echo "   📋 Copying all manifest files from .next/..."
+            find .next -maxdepth 1 -name "*.json" -type f | while read -r file; do
+              filename=$(basename "$file")
+              cp "$file" "deploy-package/.next/$filename"
+              echo "   ✅ Copied $filename"
             done
             
             # Copy server directory if it exists (contains middleware, etc.)
@@ -85,6 +79,16 @@ jobs:
               cp -R .next/server deploy-package/.next/server
               echo "   ✅ Copied .next/server"
             fi
+            
+            # Verify critical files exist
+            echo "   🔍 Verifying critical files..."
+            for file in "BUILD_ID" "routes-manifest.json" "build-manifest.json"; do
+              if [ -f "deploy-package/.next/$file" ]; then
+                echo "   ✅ Verified: $file"
+              else
+                echo "   ⚠️  WARN: Missing $file"
+              fi
+            done
             
             echo "   ✅ Copied standalone build and all required .next files"
             
