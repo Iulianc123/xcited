@@ -735,77 +735,43 @@ jobs:
               pm2 logs xcited-web --lines 50 --nostream --out 2>/dev/null || echo "   No output logs"
             fi
             
-            # Verify and reconfigure Apache reverse proxy
-            echo "🌐 Verifying Apache reverse proxy configuration..."
+            # CRITICAL: Modify CWP7pro VirtualHost configuration
+            echo "🌐 Modifying CWP7pro VirtualHost for xcited.ro..."
             
-            # Determine Apache config directory (CWP7pro vs standard)
-            APACHE_CONF_DIR=""
-            if [ -d "/usr/local/apache/conf/conf.d" ]; then
-              APACHE_CONF_DIR="/usr/local/apache/conf/conf.d"
-            elif [ -d "/usr/local/apache/conf.d" ]; then
-              APACHE_CONF_DIR="/usr/local/apache/conf.d"
-            elif [ -d "/etc/httpd/conf.d" ]; then
-              APACHE_CONF_DIR="/etc/httpd/conf.d"
-            else
-              APACHE_CONF_DIR="/etc/httpd/conf.d"
+            CWP_VHOST="/usr/local/apache/conf.d/vhosts/xcited.ro.conf"
+            if [ ! -f "$CWP_VHOST" ]; then
+              echo "   ❌ ERROR: CWP VirtualHost not found at $CWP_VHOST"
+              echo "   Please ensure domain xcited.ro exists in CWP7pro"
+              exit 1
             fi
             
-            APACHE_CONFIG="${APACHE_CONF_DIR}/xcited.conf"
-            echo "   Using Apache config directory: $APACHE_CONF_DIR"
-            if [ ! -f "$APACHE_CONFIG" ]; then
-              echo "   ⚠️  Apache config not found at $APACHE_CONFIG"
-              echo "   Creating Apache reverse proxy configuration..."
-              
-              # Create Apache config using echo (avoid YAML heredoc issues)
-              # CRITICAL: ProxyPass must come BEFORE Directory directive to avoid Forbidden errors
-              echo '<VirtualHost *:80>' > "$APACHE_CONFIG"
-              echo '    ServerName xcited.ro' >> "$APACHE_CONFIG"
-              echo '    ServerAlias www.xcited.ro' >> "$APACHE_CONFIG"
-              echo '' >> "$APACHE_CONFIG"
-              echo '    # Reverse Proxy Configuration (MUST be first to avoid Forbidden)' >> "$APACHE_CONFIG"
-              echo '    ProxyPreserveHost On' >> "$APACHE_CONFIG"
-              echo '    ProxyPass / http://127.0.0.1:3002/' >> "$APACHE_CONFIG"
-              echo '    ProxyPassReverse / http://127.0.0.1:3002/' >> "$APACHE_CONFIG"
-              echo '    ProxyRequests Off' >> "$APACHE_CONFIG"
-              echo '    ProxyTimeout 300' >> "$APACHE_CONFIG"
-              echo '    RequestHeader set X-Forwarded-Proto "http"' >> "$APACHE_CONFIG"
-              echo '' >> "$APACHE_CONFIG"
-              echo '    # DocumentRoot (not used, but required for Apache)' >> "$APACHE_CONFIG"
-              echo '    DocumentRoot /home/xcited/public_html' >> "$APACHE_CONFIG"
-              echo '' >> "$APACHE_CONFIG"
-              echo '    <Directory /home/xcited/public_html>' >> "$APACHE_CONFIG"
-              echo '        Options -Indexes +FollowSymLinks' >> "$APACHE_CONFIG"
-              echo '        AllowOverride None' >> "$APACHE_CONFIG"
-              echo '        Require all granted' >> "$APACHE_CONFIG"
-              echo '    </Directory>' >> "$APACHE_CONFIG"
-              echo '' >> "$APACHE_CONFIG"
-              echo '    ProxyRequests Off' >> "$APACHE_CONFIG"
-              echo '    ProxyTimeout 300' >> "$APACHE_CONFIG"
-              echo '    RequestHeader set X-Forwarded-Proto "http"' >> "$APACHE_CONFIG"
-              echo '' >> "$APACHE_CONFIG"
-              # CWP7pro uses /usr/local/apache/logs/ instead of /var/log/httpd/
-              if [ -d "/usr/local/apache/logs" ]; then
-                echo '    ErrorLog /usr/local/apache/logs/xcited_error.log' >> "$APACHE_CONFIG"
-                echo '    CustomLog /usr/local/apache/logs/xcited_access.log combined' >> "$APACHE_CONFIG"
-              else
-                echo '    ErrorLog /var/log/httpd/xcited_error.log' >> "$APACHE_CONFIG"
-                echo '    CustomLog /var/log/httpd/xcited_access.log combined' >> "$APACHE_CONFIG"
-              fi
-              echo '    LogLevel warn' >> "$APACHE_CONFIG"
-              echo '</VirtualHost>' >> "$APACHE_CONFIG"
-              
-              echo "   ✅ Apache config created"
+            echo "   Found CWP VirtualHost: $CWP_VHOST"
+            
+            # Backup
+            cp "$CWP_VHOST" "${CWP_VHOST}.backup.$(date +%s)"
+            
+            # Modify ProxyPass in FIRST VirtualHost (for xcited.ro, not subdomains)
+            # Only modify the first occurrence (main domain), not subdomains
+            if grep -q "ProxyPass / http://127.0.0.1:2095/" "$CWP_VHOST"; then
+              echo "   Updating ProxyPass from 2095 to 3002 in first VirtualHost..."
+              # Use sed to replace only first occurrence
+              sed -i '0,/ProxyPass \/ http:\/\/127.0.0.1:2095\//s|ProxyPass / http://127.0.0.1:2095/|ProxyPass / http://127.0.0.1:3002/|' "$CWP_VHOST"
+              sed -i '0,/ProxyPassReverse \/ http:\/\/127.0.0.1:2095\//s|ProxyPassReverse / http://127.0.0.1:2095/|ProxyPassReverse / http://127.0.0.1:3002/|' "$CWP_VHOST"
+              echo "   ✅ ProxyPass updated to port 3002"
+            elif grep -q "ProxyPass / http://127.0.0.1:3002/" "$CWP_VHOST"; then
+              echo "   ✅ ProxyPass already configured for port 3002"
             else
-              echo "   ✅ Apache config exists at $APACHE_CONFIG"
-              
-              # Verify config has correct port
-              if ! grep -q "3002" "$APACHE_CONFIG"; then
-                echo "   ⚠️  Apache config does not reference port 3002, updating..."
-                # Update ProxyPass lines
-                sed -i 's|ProxyPass / http://.*:.*/|ProxyPass / http://127.0.0.1:3002/|g' "$APACHE_CONFIG"
-                sed -i 's|ProxyPassReverse / http://.*:.*/|ProxyPassReverse / http://127.0.0.1:3002/|g' "$APACHE_CONFIG"
-                echo "   ✅ Apache config updated"
-              fi
+              echo "   ⚠️  WARN: No ProxyPass found in VirtualHost"
+              echo "   Adding ProxyPass configuration to first VirtualHost..."
+              # Add ProxyPass before first </VirtualHost> in the main domain VirtualHost
+              sed -i '/^<VirtualHost \*:80>/,/^<\/VirtualHost>/ {
+                /ServerName xcited.ro$/,/^<\/VirtualHost>/ {
+                  /^<\/VirtualHost>/i\
+    ProxyPreserveHost On\
+    ProxyPass / http://127.0.0.1:3002/\
+    ProxyPassReverse / http://127.0.0.1:3002/
+                }
+              }' "$CWP_VHOST"
             fi
             
             # Test Apache configuration
