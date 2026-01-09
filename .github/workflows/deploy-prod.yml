@@ -758,57 +758,63 @@ jobs:
               sed -i '0,/ProxyPassReverse \/ http:\/\/127.0.0.1:2095\//s|2095|3002|g' "$CWP_VHOST"
             fi
             
-            # Step 2: Ensure ProxyPass is BEFORE Directory (critical for avoiding 403)
-            echo "   Checking ProxyPass order..."
+            # Step 2: CRITICAL - Move ProxyPass BEFORE Directory (fixes 403 Forbidden)
+            echo "   Fixing ProxyPass order (must be before Directory)..."
             
-            # Check if ProxyPass exists and if Directory comes before it in first VirtualHost
+            # Find first VirtualHost boundaries
             FIRST_VHOST_START=$(grep -n "^<VirtualHost" "$CWP_VHOST" | head -1 | cut -d: -f1)
             FIRST_VHOST_END=$(awk -v start="$FIRST_VHOST_START" 'NR > start && /^<\/VirtualHost>/ {print NR; exit}' "$CWP_VHOST")
             
-            if [ -n "$FIRST_VHOST_START" ] && [ -n "$FIRST_VHOST_END" ]; then
-              # Extract first VirtualHost
-              sed -n "${FIRST_VHOST_START},${FIRST_VHOST_END}p" "$CWP_VHOST" > /tmp/first_vhost.txt
+            if [ -z "$FIRST_VHOST_START" ] || [ -z "$FIRST_VHOST_END" ]; then
+              echo "   ❌ Could not find VirtualHost boundaries"
+              exit 1
+            fi
+            
+            # Extract first VirtualHost
+            sed -n "${FIRST_VHOST_START},${FIRST_VHOST_END}p" "$CWP_VHOST" > /tmp/first_vhost.txt
+            
+            # Find relative line numbers in first VirtualHost
+            DIR_LINE=$(grep -n "<Directory" /tmp/first_vhost.txt | head -1 | cut -d: -f1)
+            PROXY_LINE=$(grep -n "ProxyPass /" /tmp/first_vhost.txt | head -1 | cut -d: -f1)
+            
+            if [ -n "$DIR_LINE" ] && [ -n "$PROXY_LINE" ] && [ "$DIR_LINE" -lt "$PROXY_LINE" ]; then
+              echo "   ⚠️  Directory ($DIR_LINE) is before ProxyPass ($PROXY_LINE) - FIXING..."
               
-              DIRECTORY_LINE=$(grep -n "<Directory" /tmp/first_vhost.txt | head -1 | cut -d: -f1)
-              PROXYPASS_LINE=$(grep -n "ProxyPass /" /tmp/first_vhost.txt | head -1 | cut -d: -f1)
+              # Find ProxyPass block boundaries (relative to first VirtualHost)
+              PROXY_START=$(grep -n "ProxyPreserveHost\|ProxyPass" /tmp/first_vhost.txt | head -1 | cut -d: -f1)
+              PROXY_END=$(grep -n "ProxyPassReverse\|ProxyRequests" /tmp/first_vhost.txt | tail -1 | cut -d: -f1)
               
-              if [ -n "$DIRECTORY_LINE" ] && [ -n "$PROXYPASS_LINE" ] && [ "$DIRECTORY_LINE" -lt "$PROXYPASS_LINE" ]; then
-                echo "   ⚠️  ProxyPass is after Directory - fixing order..."
-                
-                # Create fixed version: move ProxyPass block before Directory
-                awk '
-                  /^<VirtualHost/ { in_vhost=1; vhost_lines=""; proxy_block=""; dir_block="" }
-                  in_vhost {
-                    if (/ProxyPreserveHost|ProxyPass|ProxyPassReverse|ProxyRequests/) {
-                      proxy_block = proxy_block $0 "\n"
-                    } else if (/<Directory/ || /<\/Directory>/ || (dir_block != "" && !/^<\/VirtualHost>/)) {
-                      dir_block = dir_block $0 "\n"
-                    } else {
-                      vhost_lines = vhost_lines $0 "\n"
-                    }
-                    if (/^<\/VirtualHost>/) {
-                      # Output: vhost start, proxy block, directory block, rest, vhost end
-                      print vhost_lines proxy_block dir_block $0
-                      in_vhost=0
-                    }
-                  }
-                  !in_vhost { print }
-                ' "$CWP_VHOST" > "${CWP_VHOST}.new" && mv "${CWP_VHOST}.new" "$CWP_VHOST"
-                
-                echo "   ✅ ProxyPass moved before Directory"
-              else
-                echo "   ✅ ProxyPass order is correct"
-              fi
+              # Extract ProxyPass block
+              sed -n "${PROXY_START},${PROXY_END}p" /tmp/first_vhost.txt > /tmp/proxy_block.txt
+              
+              # Build fixed VirtualHost: everything before Directory, then ProxyPass, then Directory and rest
+              head -n $((DIR_LINE - 1)) /tmp/first_vhost.txt > /tmp/vhost_fixed.txt
+              cat /tmp/proxy_block.txt >> /tmp/vhost_fixed.txt
+              echo "" >> /tmp/vhost_fixed.txt
+              # Directory and everything after, but remove old ProxyPass block
+              sed -n "${DIR_LINE},${PROXY_END}p" /tmp/first_vhost.txt | grep -v "ProxyPreserveHost\|ProxyPass\|ProxyPassReverse\|ProxyRequests" > /tmp/temp_after_dir.txt
+              tail -n +$((PROXY_END + 1)) /tmp/first_vhost.txt >> /tmp/temp_after_dir.txt
+              cat /tmp/temp_after_dir.txt >> /tmp/vhost_fixed.txt
+              
+              # Replace first VirtualHost in original file
+              head -n $((FIRST_VHOST_START - 1)) "$CWP_VHOST" > /tmp/vhost_new.txt
+              cat /tmp/vhost_fixed.txt >> /tmp/vhost_new.txt
+              tail -n +$((FIRST_VHOST_END + 1)) "$CWP_VHOST" >> /tmp/vhost_new.txt 2>/dev/null || true
+              
+              mv /tmp/vhost_new.txt "$CWP_VHOST"
+              echo "   ✅ ProxyPass moved before Directory"
+            else
+              echo "   ✅ ProxyPass order is correct (ProxyPass at $PROXY_LINE, Directory at $DIR_LINE)"
             fi
             
             # Verify ProxyPass port is 3002
             if ! grep -q "ProxyPass / http://127.0.0.1:3002/" "$CWP_VHOST"; then
-              echo "   ⚠️  ProxyPass port not 3002, updating..."
+              echo "   ⚠️  Updating ProxyPass port to 3002..."
               sed -i 's|ProxyPass / http://127.0.0.1:[0-9]*/|ProxyPass / http://127.0.0.1:3002/|g' "$CWP_VHOST"
               sed -i 's|ProxyPassReverse / http://127.0.0.1:[0-9]*/|ProxyPassReverse / http://127.0.0.1:3002/|g' "$CWP_VHOST"
             fi
             
-            echo "   ✅ VirtualHost configuration verified"
+            echo "   ✅ VirtualHost configuration fixed"
             
             # Test Apache configuration
             # Find Apache/httpd command (CWP7pro may have it in different locations)
