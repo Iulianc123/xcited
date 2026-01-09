@@ -818,14 +818,28 @@ jobs:
             
             # Step 3: Disable ModSecurity for xcited.ro (fixes 403 from WAF)
             echo "   Disabling ModSecurity for xcited.ro..."
+            
+            # Clean up any previous incorrect attempts
+            sed -i '/<IfModule mod_security2.c>/d' "$CWP_VHOST"
+            sed -i '/SecRuleEngine Off/d' "$CWP_VHOST"
+            sed -i '/<\/IfModule>/d' "$CWP_VHOST"
+            sed -i '/ModSecurityEnabled/d' "$CWP_VHOST"
+            
+            # Find first VirtualHost start
             FIRST_VHOST_START=$(grep -n "^<VirtualHost" "$CWP_VHOST" | head -1 | cut -d: -f1)
             
-            if ! grep -q "SecRuleEngine Off" "$CWP_VHOST"; then
-              # Add SecRuleEngine Off after VirtualHost tag
-              sed -i "${FIRST_VHOST_START}a\\\t<IfModule mod_security2.c>\\\n\t\tSecRuleEngine Off\\\n\t</IfModule>" "$CWP_VHOST"
-              echo "   ✅ ModSecurity disabled (SecRuleEngine Off)"
+            if [ -z "$FIRST_VHOST_START" ]; then
+              echo "   ⚠️  Could not find VirtualHost start, skipping ModSecurity config"
             else
-              echo "   ✅ ModSecurity already disabled"
+              # Add correct IfModule block using a temporary file (safer than sed with newlines)
+              TEMP_FILE=$(mktemp)
+              head -n $FIRST_VHOST_START "$CWP_VHOST" > "$TEMP_FILE"
+              echo -e "\t<IfModule mod_security2.c>" >> "$TEMP_FILE"
+              echo -e "\t\tSecRuleEngine Off" >> "$TEMP_FILE"
+              echo -e "\t</IfModule>" >> "$TEMP_FILE"
+              tail -n +$((FIRST_VHOST_START + 1)) "$CWP_VHOST" >> "$TEMP_FILE"
+              mv "$TEMP_FILE" "$CWP_VHOST"
+              echo "   ✅ ModSecurity disabled (SecRuleEngine Off)"
             fi
             
             # Test Apache configuration
