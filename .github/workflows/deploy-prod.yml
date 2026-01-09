@@ -665,7 +665,9 @@ jobs:
               echo "   ✅ Port 3002 is free"
             fi
             
-            pm2 kill 2>/dev/null || true
+            # CRITICAL: DO NOT use pm2 kill - it stops ALL PM2 processes on the server!
+            # Only delete the specific process we manage
+            pm2 delete xcited-web 2>/dev/null || true
             sleep 2
             
             # Start PM2 directly like wishhub (no ecosystem.config.js needed)
@@ -843,20 +845,18 @@ jobs:
               if sudo -n "$HTTPD_CMD" -t 2>/dev/null || "$HTTPD_CMD" -t 2>/dev/null; then
                 echo "   ✅ Apache configuration is valid"
                 
-                # Reload Apache
-                if sudo -n systemctl reload httpd 2>/dev/null || systemctl reload httpd 2>/dev/null; then
-                  echo "   ✅ Apache reloaded"
-                elif sudo -n systemctl restart httpd 2>/dev/null || systemctl restart httpd 2>/dev/null; then
-                  echo "   ✅ Apache restarted"
+                # CRITICAL: Use graceful reload, NOT restart - restart stops ALL websites!
+                # Graceful reload only reloads config without stopping Apache
+                if sudo -n "$HTTPD_CMD" -k graceful 2>/dev/null || "$HTTPD_CMD" -k graceful 2>/dev/null; then
+                  echo "   ✅ Apache gracefully reloaded (no downtime)"
+                elif sudo -n systemctl reload httpd 2>/dev/null || systemctl reload httpd 2>/dev/null; then
+                  echo "   ✅ Apache reloaded (no downtime)"
                 elif sudo -n systemctl reload apache2 2>/dev/null || systemctl reload apache2 2>/dev/null; then
-                  echo "   ✅ Apache reloaded"
-                elif sudo -n systemctl restart apache2 2>/dev/null || systemctl restart apache2 2>/dev/null; then
-                  echo "   ✅ Apache restarted"
-                elif sudo -n "$HTTPD_CMD" -k graceful 2>/dev/null || "$HTTPD_CMD" -k graceful 2>/dev/null; then
-                  echo "   ✅ Apache gracefully reloaded"
+                  echo "   ✅ Apache reloaded (no downtime)"
                 else
-                  echo "   ⚠️  Apache reload/restart failed (may need manual restart)"
-                  echo "   Try: $HTTPD_CMD -k graceful"
+                  echo "   ⚠️  Apache graceful reload failed (config may need manual reload)"
+                  echo "   Try manually: $HTTPD_CMD -k graceful"
+                  echo "   ⚠️  NOT using restart to avoid stopping all websites!"
                 fi
               else
                 echo "   ⚠️  Could not test Apache configuration (may need sudo)"
