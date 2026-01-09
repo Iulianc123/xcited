@@ -758,83 +758,57 @@ jobs:
               sed -i '0,/ProxyPassReverse \/ http:\/\/127.0.0.1:2095\//s|2095|3002|g' "$CWP_VHOST"
             fi
             
-            # Step 2: Ensure ProxyPass is BEFORE Directory in first VirtualHost
-            # Extract first VirtualHost, reorder, and replace
-            python3 << 'PYTHON_SCRIPT'
-import re
-import sys
-
-vhost_file = "/usr/local/apache/conf.d/vhosts/xcited.ro.conf"
-with open(vhost_file, 'r') as f:
-    content = f.read()
-
-# Find first VirtualHost for xcited.ro (not subdomains)
-pattern = r'(<VirtualHost\s+\*:80>.*?ServerName\s+xcited\.ro.*?</VirtualHost>)'
-match = re.search(pattern, content, re.DOTALL)
-
-if match:
-    vhost = match.group(1)
-    
-    # Check if ProxyPass exists and if it's after Directory
-    has_proxypass = 'ProxyPass /' in vhost
-    has_directory = '<Directory' in vhost
-    
-    if has_proxypass and has_directory:
-        # Find positions
-        proxypass_pos = vhost.find('ProxyPass /')
-        directory_pos = vhost.find('<Directory')
-        
-        if directory_pos < proxypass_pos:
-            # ProxyPass is AFTER Directory - need to reorder
-            print("   ⚠️  ProxyPass is after Directory - reordering...")
+            # Step 2: Ensure ProxyPass is BEFORE Directory (critical for avoiding 403)
+            echo "   Checking ProxyPass order..."
             
-            # Extract ProxyPass block
-            proxypass_block = re.search(r'(ProxyPreserveHost.*?ProxyPassReverse[^\n]*)', vhost, re.DOTALL)
-            if proxypass_block:
-                proxy_lines = proxypass_block.group(1).strip()
-                
-                # Remove ProxyPass block from current location
-                vhost = re.sub(r'ProxyPreserveHost.*?ProxyPassReverse[^\n]*\n', '', vhost, flags=re.DOTALL)
-                
-                # Insert ProxyPass BEFORE first Directory
-                vhost = re.sub(r'(<Directory)', f'{proxy_lines}\n    \\1', vhost, count=1)
-                
-                # Replace in original content
-                content = content[:match.start()] + vhost + content[match.end():]
-                
-                with open(vhost_file, 'w') as f:
-                    f.write(content)
-                print("   ✅ ProxyPass moved before Directory")
-            else:
-                print("   ⚠️  Could not extract ProxyPass block")
-        else:
-            print("   ✅ ProxyPass is already before Directory")
-    elif not has_proxypass:
-        # Add ProxyPass before Directory or before </VirtualHost>
-        proxy_config = "    ProxyPreserveHost On\n    ProxyPass / http://127.0.0.1:3002/\n    ProxyPassReverse / http://127.0.0.1:3002/\n    ProxyRequests Off\n"
-        
-        if has_directory:
-            vhost = re.sub(r'(<Directory)', f'{proxy_config}    \\1', vhost, count=1)
-        else:
-            vhost = re.sub(r'(</VirtualHost>)', f'{proxy_config}\\1', vhost, count=1)
-        
-        content = content[:match.start()] + vhost + content[match.end():]
-        with open(vhost_file, 'w') as f:
-            f.write(content)
-        print("   ✅ ProxyPass added to VirtualHost")
-else:
-    print("   ⚠️  Could not find VirtualHost for xcited.ro")
-    sys.exit(1)
-PYTHON_SCRIPT
+            # Check if ProxyPass exists and if Directory comes before it in first VirtualHost
+            FIRST_VHOST_START=$(grep -n "^<VirtualHost" "$CWP_VHOST" | head -1 | cut -d: -f1)
+            FIRST_VHOST_END=$(awk -v start="$FIRST_VHOST_START" 'NR > start && /^<\/VirtualHost>/ {print NR; exit}' "$CWP_VHOST")
             
-            if [ $? -eq 0 ]; then
-              echo "   ✅ VirtualHost configuration fixed"
-            else
-              echo "   ⚠️  Python script failed, trying sed fallback..."
-              # Fallback: simple sed replacement
-              sed -i 's|ProxyPass / http://.*:.*/|ProxyPass / http://127.0.0.1:3002/|' "$CWP_VHOST"
-              sed -i 's|ProxyPassReverse / http://.*:.*/|ProxyPassReverse / http://127.0.0.1:3002/|' "$CWP_VHOST"
+            if [ -n "$FIRST_VHOST_START" ] && [ -n "$FIRST_VHOST_END" ]; then
+              # Extract first VirtualHost
+              sed -n "${FIRST_VHOST_START},${FIRST_VHOST_END}p" "$CWP_VHOST" > /tmp/first_vhost.txt
+              
+              DIRECTORY_LINE=$(grep -n "<Directory" /tmp/first_vhost.txt | head -1 | cut -d: -f1)
+              PROXYPASS_LINE=$(grep -n "ProxyPass /" /tmp/first_vhost.txt | head -1 | cut -d: -f1)
+              
+              if [ -n "$DIRECTORY_LINE" ] && [ -n "$PROXYPASS_LINE" ] && [ "$DIRECTORY_LINE" -lt "$PROXYPASS_LINE" ]; then
+                echo "   ⚠️  ProxyPass is after Directory - fixing order..."
+                
+                # Create fixed version: move ProxyPass block before Directory
+                awk '
+                  /^<VirtualHost/ { in_vhost=1; vhost_lines=""; proxy_block=""; dir_block="" }
+                  in_vhost {
+                    if (/ProxyPreserveHost|ProxyPass|ProxyPassReverse|ProxyRequests/) {
+                      proxy_block = proxy_block $0 "\n"
+                    } else if (/<Directory/ || /<\/Directory>/ || (dir_block != "" && !/^<\/VirtualHost>/)) {
+                      dir_block = dir_block $0 "\n"
+                    } else {
+                      vhost_lines = vhost_lines $0 "\n"
+                    }
+                    if (/^<\/VirtualHost>/) {
+                      # Output: vhost start, proxy block, directory block, rest, vhost end
+                      print vhost_lines proxy_block dir_block $0
+                      in_vhost=0
+                    }
+                  }
+                  !in_vhost { print }
+                ' "$CWP_VHOST" > "${CWP_VHOST}.new" && mv "${CWP_VHOST}.new" "$CWP_VHOST"
+                
+                echo "   ✅ ProxyPass moved before Directory"
+              else
+                echo "   ✅ ProxyPass order is correct"
+              fi
             fi
+            
+            # Verify ProxyPass port is 3002
+            if ! grep -q "ProxyPass / http://127.0.0.1:3002/" "$CWP_VHOST"; then
+              echo "   ⚠️  ProxyPass port not 3002, updating..."
+              sed -i 's|ProxyPass / http://127.0.0.1:[0-9]*/|ProxyPass / http://127.0.0.1:3002/|g' "$CWP_VHOST"
+              sed -i 's|ProxyPassReverse / http://127.0.0.1:[0-9]*/|ProxyPassReverse / http://127.0.0.1:3002/|g' "$CWP_VHOST"
+            fi
+            
+            echo "   ✅ VirtualHost configuration verified"
             
             # Test Apache configuration
             # Find Apache/httpd command (CWP7pro may have it in different locations)
