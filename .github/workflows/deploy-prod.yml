@@ -818,16 +818,14 @@ jobs:
             
             # Step 3: Disable ModSecurity for xcited.ro (fixes 403 from WAF)
             echo "   Disabling ModSecurity for xcited.ro..."
-            if grep -q "ModSecurityEnabled" "$CWP_VHOST"; then
-              sed -i 's/ModSecurityEnabled.*/ModSecurityEnabled Off/' "$CWP_VHOST"
-              echo "   ✅ ModSecurity disabled"
+            FIRST_VHOST_START=$(grep -n "^<VirtualHost" "$CWP_VHOST" | head -1 | cut -d: -f1)
+            
+            if ! grep -q "SecRuleEngine Off" "$CWP_VHOST"; then
+              # Add SecRuleEngine Off after VirtualHost tag
+              sed -i "${FIRST_VHOST_START}a\\\t<IfModule mod_security2.c>\\\n\t\tSecRuleEngine Off\\\n\t</IfModule>" "$CWP_VHOST"
+              echo "   ✅ ModSecurity disabled (SecRuleEngine Off)"
             else
-              # Add ModSecurity disable directive in first VirtualHost
-              FIRST_VHOST_START=$(grep -n "^<VirtualHost" "$CWP_VHOST" | head -1 | cut -d: -f1)
-              if [ -n "$FIRST_VHOST_START" ]; then
-                sed -i "${FIRST_VHOST_START}a\\\tModSecurityEnabled Off" "$CWP_VHOST"
-                echo "   ✅ ModSecurity disabled directive added"
-              fi
+              echo "   ✅ ModSecurity already disabled"
             fi
             
             # Test Apache configuration
