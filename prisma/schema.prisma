@@ -112,6 +112,8 @@ model User {
   status           UserStatus @default(active)
   suspensionEndsAt DateTime?
   visibilityScore  Float      @default(1.0)
+  isAdmin          Boolean    @default(false)
+  password         String?    // Hashed password for credentials provider
   createdAt        DateTime   @default(now())
   lastSeenAt       DateTime?
 
