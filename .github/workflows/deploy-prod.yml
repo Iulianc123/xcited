@@ -816,6 +816,20 @@ jobs:
             
             echo "   ✅ VirtualHost configuration fixed"
             
+            # Step 3: Disable ModSecurity for xcited.ro (fixes 403 from WAF)
+            echo "   Disabling ModSecurity for xcited.ro..."
+            if grep -q "ModSecurityEnabled" "$CWP_VHOST"; then
+              sed -i 's/ModSecurityEnabled.*/ModSecurityEnabled Off/' "$CWP_VHOST"
+              echo "   ✅ ModSecurity disabled"
+            else
+              # Add ModSecurity disable directive in first VirtualHost
+              FIRST_VHOST_START=$(grep -n "^<VirtualHost" "$CWP_VHOST" | head -1 | cut -d: -f1)
+              if [ -n "$FIRST_VHOST_START" ]; then
+                sed -i "${FIRST_VHOST_START}a\\\tModSecurityEnabled Off" "$CWP_VHOST"
+                echo "   ✅ ModSecurity disabled directive added"
+              fi
+            fi
+            
             # Test Apache configuration
             # Find Apache/httpd command (CWP7pro may have it in different locations)
             HTTPD_CMD=""
