@@ -706,6 +706,61 @@ jobs:
             pm2 save
             echo "✅ PM2 process management completed"
             
+      - name: Post-deploy - Recover Apache if down
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.CWP_HOST }}
+          username: ${{ secrets.CWP_USER }}
+          password: ${{ secrets.CWP_SSH_KEY }}
+          port: ${{ secrets.CWP_PORT || 22 }}
+          script: |
+            set -e
+            CWP_VHOST="/usr/local/apache/conf.d/vhosts/xcited.ro.conf"
+            echo "🧯 Emergency Apache recovery..."
+
+            if [ -f "$CWP_VHOST" ]; then
+              BACKUP="${CWP_VHOST}.backup.$(date +%s)"
+              cp "$CWP_VHOST" "$BACKUP"
+              echo "   Backup created: $BACKUP"
+
+              # Remove malformed ModSecurity blocks that break Apache syntax
+              sed -i '/<IfModule mod_security2.c>/d' "$CWP_VHOST"
+              sed -i '/<IfModule mod_security2>/d' "$CWP_VHOST"
+              sed -i '/SecRuleEngine Off/d' "$CWP_VHOST"
+              sed -i '/SecRuleEngine On/d' "$CWP_VHOST"
+              sed -i '/<\/IfModule>/d' "$CWP_VHOST"
+              sed -i '/ModSecurityEnabled/d' "$CWP_VHOST"
+              sed -i '/IfModule.*mod_security/d' "$CWP_VHOST"
+            else
+              echo "   ⚠️  VirtualHost file not found at $CWP_VHOST"
+            fi
+
+            # Find Apache command
+            HTTPD_CMD=""
+            for cmd in "/usr/sbin/httpd" "/usr/local/apache/bin/httpd" "/usr/bin/httpd" "httpd" "/usr/sbin/apache2ctl" "/usr/bin/apache2ctl" "apache2ctl"; do
+              if command -v "$cmd" >/dev/null 2>&1 || [ -f "$cmd" ]; then
+                HTTPD_CMD="$cmd"
+                break
+              fi
+            done
+
+            if [ -n "$HTTPD_CMD" ]; then
+              echo "   Found Apache command: $HTTPD_CMD"
+              echo "   Testing Apache config..."
+              $HTTPD_CMD -t 2>/dev/null || echo "   ⚠️  Apache config still invalid (continuing to next step)"
+
+              echo "   Trying graceful reload/start..."
+              if sudo -n "$HTTPD_CMD" -k graceful 2>/dev/null || "$HTTPD_CMD" -k graceful 2>/dev/null; then
+                echo "   ✅ Apache gracefully reloaded"
+              else
+                sudo -n systemctl start httpd 2>/dev/null || systemctl start httpd 2>/dev/null || true
+                sudo -n systemctl start apache2 2>/dev/null || systemctl start apache2 2>/dev/null || true
+                echo "   ✅ Apache start attempted"
+              fi
+            else
+              echo "   ⚠️  Apache command not found"
+            fi
+
       - name: Post-deploy - Verify and configure Apache
         uses: appleboy/ssh-action@master
         with:
